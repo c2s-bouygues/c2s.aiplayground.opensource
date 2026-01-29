@@ -1,0 +1,46 @@
+{
+  "id": "weather",
+  "name": "Weather (Demo)",
+  "version": "1.0.0",
+  "description": "Plugin de demonstration qui retourne des donnees meteo fictives",
+  "author": "Demo",
+  "license": "MIT",
+  "icon": "hugeicons:sun-03",
+  "category": "utility",
+  "requiredEnvVars": [],
+  "optionalEnvVars": ["WEATHER_DEFAULT_CITY"],
+  "configSchema": {
+    "type": "object",
+    "title": "Weather Configuration",
+    "properties": {
+      "defaultCity": {
+        "type": "string",
+        "title": "Ville par defaut",
+        "description": "Ville utilisee si aucune n'est specifiee",
+        "default": "Paris"
+      },
+      "units": {
+        "type": "string",
+        "title": "Unites",
+        "description": "Systeme d'unites pour la temperature",
+        "enum": ["celsius", "fahrenheit"],
+        "default": "celsius"
+      }
+    }
+  },
+  "tools": [
+    {
+      "id": "get_weather",
+      "name": "Obtenir la meteo",
+      "description": "Retourne les conditions meteorologiques actuelles pour une ville donnee (donnees fictives)",
+      "systemPromptInstructions": {
+        "fr": "- weather_get_weather: Obtient la meteo actuelle pour une ville\n  - Utilise-le quand l'utilisateur demande la meteo\n  - Retourne des donnees de demonstration (non reelles)",
+        "en": "- weather_get_weather: Gets current weather for a city\n  - Use when user asks about weather\n  - Returns demo data (not real)"
+      }
+    }
+  ],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}
