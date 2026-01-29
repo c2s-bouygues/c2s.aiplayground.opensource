@@ -373,6 +373,10 @@ export function createSearchPixabayTool(context: PluginContext): AnyTool {
 				};
 			}
 
+			// Use config defaultPerPage as maximum limit
+			const requestedPerPage = params.per_page || defaultPerPage;
+			const effectivePerPage = Math.min(requestedPerPage, defaultPerPage);
+
 			const searchParams = new URLSearchParams({
 				key: apiKey,
 				q: params.q,
@@ -380,10 +384,10 @@ export function createSearchPixabayTool(context: PluginContext): AnyTool {
 				image_type: params.image_type || 'all',
 				orientation: params.orientation || 'all',
 				editors_choice: String(params.editors_choice || false),
-				safesearch: String(params.safesearch !== undefined ? params.safesearch : safeSearch),
+				safesearch: String(safeSearch), // Always use config value
 				order: params.order || 'popular',
 				page: String(params.page || 1),
-				per_page: String(params.per_page || defaultPerPage)
+				per_page: String(effectivePerPage)
 			});
 
 			if (params.category) searchParams.set('category', params.category);
