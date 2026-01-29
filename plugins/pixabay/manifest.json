@@ -1,0 +1,55 @@
+{
+  "id": "pixabay",
+  "name": "Pixabay Image Search",
+  "version": "1.0.0",
+  "description": "Search for royalty-free images on Pixabay and store them locally",
+  "author": "AI Playground",
+  "license": "MIT",
+  "icon": "tabler:photo-search",
+  "category": "search",
+  "homepage": "https://pixabay.com/",
+  "requiredEnvVars": ["PIXABAY_API_KEY"],
+  "optionalEnvVars": [],
+  "configSchema": {
+    "type": "object",
+    "title": "Pixabay Configuration",
+    "properties": {
+      "defaultLanguage": {
+        "type": "string",
+        "title": "Langue par defaut",
+        "description": "Langue pour les recherches (code ISO)",
+        "enum": ["en", "fr", "de", "es", "it", "pt", "ja", "ko", "zh"],
+        "default": "en"
+      },
+      "safeSearch": {
+        "type": "boolean",
+        "title": "SafeSearch",
+        "description": "Filtrer le contenu adulte",
+        "default": true
+      },
+      "defaultPerPage": {
+        "type": "number",
+        "title": "Resultats par page",
+        "description": "Nombre d'images retournees par defaut (3-20)",
+        "default": 6,
+        "minimum": 3,
+        "maximum": 20
+      }
+    }
+  },
+  "tools": [
+    {
+      "id": "search_images",
+      "name": "Recherche Pixabay",
+      "description": "Recherche des images libres de droits sur Pixabay",
+      "systemPromptInstructions": {
+        "fr": "- pixabay_search_images: Recherche des images libres de droits sur Pixabay\n  - Utilise-le quand l'utilisateur cherche des images, photos, illustrations ou vecteurs\n  - Traduis les termes de recherche en anglais pour de meilleurs resultats\n  - Tu peux filtrer par type (photo, illustration, vector), orientation, categorie et couleur\n  - Retourne les images avec leurs metadonnees et statistiques",
+        "en": "- pixabay_search_images: Search for royalty-free images on Pixabay\n  - Use when user looks for images, photos, illustrations or vectors\n  - Translate search terms to English for better results\n  - Can filter by type (photo, illustration, vector), orientation, category and color\n  - Returns images with metadata and statistics"
+      }
+    }
+  ],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}

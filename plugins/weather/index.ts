@@ -5,7 +5,7 @@
  * Used to test the plugin system.
  */
 
-import type { PluginExport, PluginToolDefinition } from '../../../src/lib/server/mcp/plugins/types';
+import type { PluginExport, PluginToolDefinition } from '../../src/types';
 import manifest from './manifest.json';
 import { createGetWeatherTool } from './tools/get-weather';
 

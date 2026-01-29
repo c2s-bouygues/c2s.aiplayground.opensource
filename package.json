@@ -1,0 +1,15 @@
+{
+  "name": "chatbot-rag-plugins",
+  "version": "1.0.0",
+  "description": "External MCP plugins for AI Playground",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,5 +1,5 @@
 import { tool, jsonSchema } from 'ai';
-import type { PluginContext, AnyTool } from '../../../../src/lib/server/mcp/plugins/types';
+import type { PluginContext, AnyTool } from '../../../src/types';
 
 interface GetWeatherParams {
 	city: string;
