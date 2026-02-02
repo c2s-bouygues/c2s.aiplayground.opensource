@@ -16,13 +16,69 @@ PLUGIN_BRANCH=main
 ENABLED_PLUGINS=weather  # comma-separated, or empty for all
 ```
 
-### Local Development
+### Local Development (with AI Playground)
 
 ```bash
 # In the AI Playground directory
 npm run plugins:fetch https://github.com/c2s-bouygues/c2s.aiplayground.opensource.git main
 npm run dev
 ```
+
+## Plugin Playground
+
+This repository includes a built-in test interface to quickly develop and test plugins without needing the full AI Playground platform.
+
+### Quick Start
+
+```bash
+# Clone this repository
+git clone https://github.com/c2s-bouygues/c2s.aiplayground.opensource.git
+cd c2s.aiplayground.opensource
+
+# Install dependencies
+npm install
+
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your API keys
+
+# Start the playground
+npm run dev
+```
+
+Open http://localhost:5173 in your browser to access the Plugin Playground.
+
+### Features
+
+- **Plugin browser**: View all available plugins and their metadata
+- **Configuration editor**: Set environment variables and plugin config
+- **Tool tester**: Execute tools with custom parameters
+- **Result viewer**: See tool execution results in real-time
+
+### Adding a New Plugin
+
+1. Create a new directory in `plugins/`:
+   ```bash
+   mkdir plugins/my-plugin
+   ```
+
+2. Create the required files:
+   - `manifest.json` - Plugin metadata
+   - `index.ts` - Plugin export
+   - `tools/` - Tool implementations
+
+3. Import your plugin in `src/lib/server/plugin-loader.ts`:
+   ```typescript
+   import myPlugin from '../../../plugins/my-plugin';
+
+   const loadedPlugins: PluginExport[] = [
+     weatherPlugin,
+     pixabayPlugin,
+     myPlugin  // Add your plugin here
+   ];
+   ```
+
+4. Restart the dev server - your plugin will appear in the playground!
 
 ## Available Plugins
 
