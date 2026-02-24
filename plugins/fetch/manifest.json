@@ -17,7 +17,7 @@
         "type": "string",
         "title": "User-Agent",
         "description": "User-Agent envoye lors des requetes HTTP",
-        "default": "Mozilla/5.0 (compatible; PluginFetch/1.0)"
+        "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
       },
       "maxLength": {
         "type": "number",
