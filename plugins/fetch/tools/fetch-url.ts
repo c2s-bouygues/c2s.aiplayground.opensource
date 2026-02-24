@@ -110,7 +110,7 @@ export function createFetchUrlTool(context: PluginContext): AnyTool {
 		}),
 		execute: async (params): Promise<FetchUrlResult> => {
 			const { url, raw = false } = params;
-			const maxLength = params.max_length ?? defaultMaxLength;
+			const maxLength = params.max_length || defaultMaxLength;
 			const startIndex = params.start_index ?? 0;
 
 			context.logger.info('Fetching URL', { url, maxLength, startIndex, raw });
