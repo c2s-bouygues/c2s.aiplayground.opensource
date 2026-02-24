@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm install:*)",
       "mcp__svelte__svelte-autofixer",
-      "Bash(npm run check:*)"
+      "Bash(npm run check:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

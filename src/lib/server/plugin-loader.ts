@@ -9,9 +9,10 @@ import type { PluginExport, PluginContext, PluginLogger, PluginStorageAPI, ToolC
 // Import plugins statically (Vite doesn't support dynamic imports from fs in dev)
 import weatherPlugin from '../../../plugins/weather';
 import pixabayPlugin from '../../../plugins/pixabay';
+import fetchPlugin from '../../../plugins/fetch';
 
 // Registry of loaded plugins
-const loadedPlugins: PluginExport[] = [weatherPlugin, pixabayPlugin];
+const loadedPlugins: PluginExport[] = [weatherPlugin, pixabayPlugin, fetchPlugin];
 
 export interface PluginInfo {
 	id: string;

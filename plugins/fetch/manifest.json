@@ -1,0 +1,53 @@
+{
+  "id": "fetch",
+  "name": "Fetch URL",
+  "version": "1.0.0",
+  "description": "Recupere le contenu d'une URL et le convertit en markdown lisible",
+  "author": "Plugin System",
+  "license": "MIT",
+  "icon": "hugeicons:global",
+  "category": "utility",
+  "requiredEnvVars": [],
+  "optionalEnvVars": [],
+  "configSchema": {
+    "type": "object",
+    "title": "Fetch Configuration",
+    "properties": {
+      "userAgent": {
+        "type": "string",
+        "title": "User-Agent",
+        "description": "User-Agent envoye lors des requetes HTTP",
+        "default": "Mozilla/5.0 (compatible; PluginFetch/1.0)"
+      },
+      "maxLength": {
+        "type": "number",
+        "title": "Longueur max par defaut",
+        "description": "Nombre maximum de caracteres retournes par defaut",
+        "default": 5000,
+        "minimum": 100,
+        "maximum": 100000
+      },
+      "ignoreRobotsTxt": {
+        "type": "boolean",
+        "title": "Ignorer robots.txt",
+        "description": "Si active, ne verifie pas robots.txt avant de fetcher",
+        "default": true
+      }
+    }
+  },
+  "tools": [
+    {
+      "id": "fetch_url",
+      "name": "Fetch URL",
+      "description": "Recupere le contenu d'une URL et le convertit en markdown",
+      "systemPromptInstructions": {
+        "fr": "- fetch_fetch_url: Recupere le contenu d'une page web\n  - Convertit automatiquement le HTML en markdown lisible\n  - Supporte la pagination avec start_index et max_length\n  - Utilise raw=true pour obtenir le HTML brut",
+        "en": "- fetch_fetch_url: Fetches web page content\n  - Automatically converts HTML to readable markdown\n  - Supports pagination with start_index and max_length\n  - Use raw=true to get raw HTML"
+      }
+    }
+  ],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}
