@@ -116,42 +116,66 @@ export function createFetchUrlTool(context: PluginContext): AnyTool {
 
 			context.logger.info('Fetching URL', { url, maxLength, startIndex, raw });
 
-			const response = await fetch(url, {
-				headers: {
-					'User-Agent': userAgent,
-					Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-				},
-				redirect: 'follow'
-			});
+			try {
+				const response = await fetch(url, {
+					headers: {
+						'User-Agent': userAgent,
+						Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+					},
+					redirect: 'follow'
+				});
 
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`);
+				if (!response.ok) {
+					const errorMsg = `HTTP ${response.status}: ${response.statusText} for ${url}`;
+					context.logger.error('Fetch failed', { url, status: response.status });
+					return {
+						url,
+						content: errorMsg,
+						contentType: 'text/plain',
+						contentLength: 0,
+						startIndex: 0,
+						truncated: false,
+						message: `Erreur : ${errorMsg}`
+					};
+				}
+
+				const contentType = response.headers.get('content-type') || 'text/plain';
+				const body = await response.text();
+
+				let content: string;
+				if (isHtmlContent(contentType, body) && !raw) {
+					content = htmlToReadableMarkdown(body, url);
+				} else {
+					content = body;
+				}
+
+				const fullLength = content.length;
+				const { text, truncated } = applyPagination(content, startIndex, maxLength);
+
+				return {
+					url,
+					content: text,
+					contentType,
+					contentLength: fullLength,
+					startIndex,
+					truncated,
+					message: truncated
+						? `Contenu recupere (${fullLength} caracteres, affichage ${startIndex}-${startIndex + maxLength})`
+						: `Contenu recupere (${fullLength} caracteres)`
+				};
+			} catch (error) {
+				const errorMsg = error instanceof Error ? error.message : String(error);
+				context.logger.error('Fetch error', { url, error: errorMsg });
+				return {
+					url,
+					content: `Erreur lors de la recuperation de ${url}: ${errorMsg}`,
+					contentType: 'text/plain',
+					contentLength: 0,
+					startIndex: 0,
+					truncated: false,
+					message: `Erreur : ${errorMsg}`
+				};
 			}
-
-			const contentType = response.headers.get('content-type') || 'text/plain';
-			const body = await response.text();
-
-			let content: string;
-			if (isHtmlContent(contentType, body) && !raw) {
-				content = htmlToReadableMarkdown(body, url);
-			} else {
-				content = body;
-			}
-
-			const fullLength = content.length;
-			const { text, truncated } = applyPagination(content, startIndex, maxLength);
-
-			return {
-				url,
-				content: text,
-				contentType,
-				contentLength: fullLength,
-				startIndex,
-				truncated,
-				message: truncated
-					? `Contenu recupere (${fullLength} caracteres, affichage ${startIndex}-${startIndex + maxLength})`
-					: `Contenu recupere (${fullLength} caracteres)`
-			};
 		}
 	});
 }
