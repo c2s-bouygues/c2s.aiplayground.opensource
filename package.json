@@ -12,7 +12,7 @@
   "dependencies": {
     "@iconify/svelte": "^5.2.1",
     "@mozilla/readability": "^0.6.0",
-    "ai": "^6.0.98",
+    "ai": "^6.0.105",
     "bits-ui": "^2.16.2",
     "clsx": "^2.1.1",
     "linkedom": "^0.18.12",
@@ -23,16 +23,16 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^7.0.1",
-    "@sveltejs/kit": "^2.53.0",
+    "@sveltejs/kit": "^2.53.4",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.2.1",
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "@types/turndown": "^5.0.6",
-    "svelte": "^5.53.3",
-    "svelte-check": "^4.4.3",
+    "svelte": "^5.53.6",
+    "svelte-check": "^4.4.4",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vite-plugin-mkcert": "^1.17.9"
+    "vite-plugin-mkcert": "^1.17.10"
   }
 }
