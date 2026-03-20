@@ -1,0 +1,36 @@
+{
+  "id": "bing",
+  "name": "Bing Web Search",
+  "version": "1.0.0",
+  "description": "Search the web using an Azure AI Foundry agent pre-configured with Bing grounding",
+  "author": "AI Playground",
+  "license": "MIT",
+  "icon": "simple-icons:microsoftbing",
+  "category": "search",
+  "homepage": "https://www.bing.com/",
+  "requiredEnvVars": [
+    "AZURE_FOUNDRY_BING_ENDPOINT",
+    "AZURE_FOUNDRY_BING_API_KEY"
+  ],
+  "optionalEnvVars": ["AZURE_FOUNDRY_BING_MODEL"],
+  "configSchema": {
+    "type": "object",
+    "title": "Bing Search Configuration",
+    "properties": {}
+  },
+  "tools": [
+    {
+      "id": "search_bing",
+      "name": "Bing Web Search",
+      "description": "Search the internet via an Azure AI Foundry agent with Bing grounding",
+      "systemPromptInstructions": {
+        "fr": "- bing_search_bing: Recherche sur le web via un agent Azure AI Foundry avec grounding Bing\n  - Utilise-le pour trouver des informations actuelles sur internet\n  - Le resultat contient un resume, des sources detaillees (titre, URL, extrait, date) et une synthese\n  - IMPORTANT: Utilise toutes les informations retournees par les sources pour repondre de maniere complete et detaillee. Ne dis jamais que tu n'as pas les details si le resultat contient des informations. Cite les sources par leur identifiant [Source X] et inclus les URLs.",
+        "en": "- bing_search_bing: Searches the web via an Azure AI Foundry agent with Bing grounding\n  - Use it to find current information on the internet\n  - The result contains a summary, detailed sources (title, URL, excerpt, date) and a synthesis\n  - IMPORTANT: Use ALL information from the returned sources to give a complete, detailed answer. Never say you don't have details if the result contains information. Cite sources by their ID [Source X] and include URLs."
+      }
+    }
+  ],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}

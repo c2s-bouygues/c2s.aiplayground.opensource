@@ -10,9 +10,10 @@ import type { PluginExport, PluginContext, PluginLogger, PluginStorageAPI, ToolC
 import weatherPlugin from '../../../plugins/weather';
 import pixabayPlugin from '../../../plugins/pixabay';
 import fetchPlugin from '../../../plugins/fetch';
+import bingPlugin from '../../../plugins/bing';
 
 // Registry of loaded plugins
-const loadedPlugins: PluginExport[] = [weatherPlugin, pixabayPlugin, fetchPlugin];
+const loadedPlugins: PluginExport[] = [weatherPlugin, pixabayPlugin, fetchPlugin, bingPlugin];
 
 export interface PluginInfo {
 	id: string;
