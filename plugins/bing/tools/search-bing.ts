@@ -23,16 +23,29 @@ interface ResponsesApiResponse {
 /** Structured response format returned by the Foundry agent */
 interface AgentSource {
 	id: string;
+	rank: number;
 	title: string;
-	url: string;
+	url: string | null;
+	domain: string | null;
 	content: string;
-	date?: string;
+	date: string | null;
+	author: string | null;
+	publisher: string | null;
+	type: string | null;
+}
+
+interface AgentError {
+	code: string;
+	message: string;
+	details: string | null;
 }
 
 interface AgentStructuredResponse {
+	query: string;
 	message: string;
-	sources?: AgentSource[];
-	summary?: string;
+	sources?: AgentSource[] | null;
+	summary?: string | null;
+	errors?: AgentError[];
 }
 
 /** Structured result returned to the application */
@@ -65,14 +78,14 @@ function extractDomain(url: string): string {
  */
 function convertToSources(agentSources: AgentSource[]): Source[] {
 	return agentSources.map((src, index) => ({
-		id: `bing-${src.id}-${encodeURIComponent(src.url)}`,
+		id: `bing-${src.id}${src.url ? '-' + encodeURIComponent(src.url) : ''}`,
 		content: stripHtml(src.content),
 		metadata: {
 			source: stripHtml(src.title),
 			type: 'web',
-			url: src.url,
-			domain: extractDomain(src.url),
-			age: src.date
+			url: src.url ?? undefined,
+			domain: src.domain ?? (src.url ? extractDomain(src.url) : undefined),
+			age: src.date ?? undefined
 		},
 		similarity: 1 - index * (0.5 / Math.max(agentSources.length - 1, 1))
 	}));
@@ -175,18 +188,20 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 							? responseText.slice(jsonStart, jsonEnd + 1)
 							: responseText;
 					const parsed: AgentStructuredResponse = JSON.parse(jsonStr);
-					const sources = parsed.sources?.length ? convertToSources(parsed.sources) : undefined;
 
-					const contentParts: string[] = [];
-					if (parsed.message) contentParts.push(stripHtml(parsed.message));
-					if (parsed.summary) contentParts.push(stripHtml(parsed.summary));
-					const content = contentParts.join('\n\n') || undefined;
+					if (parsed.errors?.length) {
+						context.logger.warn('search_bing agent errors', { errors: parsed.errors });
+					}
+
+					const sources = parsed.sources?.length ? convertToSources(parsed.sources) : undefined;
+					const content = parsed.summary ? stripHtml(parsed.summary) : undefined;
 
 					const count = sources?.length ?? 0;
 					const message = searchResultsFoundMsg(context.locale, count);
 
 					context.logger.info('search_bing completed', {
-						query: params.q,
+						query: parsed.query ?? params.q,
+						status: parsed.message,
 						sourceCount: count
 					});
 
