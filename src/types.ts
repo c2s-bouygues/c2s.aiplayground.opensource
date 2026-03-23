@@ -80,6 +80,27 @@ export interface PluginContext extends ToolContext {
 }
 
 /**
+ * Web source metadata returned by search tools (kept in sync with the main app's Source type)
+ */
+export interface SourceMetadata {
+	source: string;
+	type: string;
+	url?: string;
+	domain?: string;
+	age?: string;
+}
+
+/**
+ * A structured source entry returned by search tools so the UI can render source citations
+ */
+export interface Source {
+	id: string;
+	content: string;
+	metadata: SourceMetadata;
+	similarity: number;
+}
+
+/**
  * Tool declaration in the manifest
  */
 export interface PluginToolDeclaration {

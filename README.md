@@ -74,6 +74,8 @@ Open http://localhost:5173 in your browser to access the Plugin Playground.
    const loadedPlugins: PluginExport[] = [
      weatherPlugin,
      pixabayPlugin,
+     fetchPlugin,
+     bingPlugin,
      myPlugin  // Add your plugin here
    ];
    ```
@@ -82,9 +84,39 @@ Open http://localhost:5173 in your browser to access the Plugin Playground.
 
 ## Available Plugins
 
-| Plugin | Description | Status |
-|--------|-------------|--------|
-| `weather` | Demo plugin returning mock weather data | Ready |
+| Plugin | Category | Description | Required env vars | Status |
+|--------|----------|-------------|-------------------|--------|
+| `weather` | utility | Demo plugin returning mock weather data | — | Ready |
+| `pixabay` | search | Search for royalty-free images via Pixabay | `PIXABAY_API_KEY` | Ready |
+| `fetch` | utility | Fetch and parse web page content as Markdown | — | Ready |
+| `bing` | search | Web search via an Azure AI Foundry agent with Bing grounding | `AZURE_FOUNDRY_BING_ENDPOINT` `AZURE_FOUNDRY_BING_API_KEY` | Ready |
+
+### Bing Web Search Plugin
+
+Calls an Azure AI Foundry agent pre-configured with **Bing grounding** to answer search queries with real-time web results. Each call sends a single request to the Foundry Responses API exposed by the agent application.
+
+Important: when you use an agent application endpoint (`.../applications/{agent-name}/protocols/openai/responses`), per-request `instructions` are rejected by Azure Foundry. Configure the system prompt and grounding behavior directly in the Foundry agent instead.
+
+#### Setup
+
+1. In [Azure AI Foundry](https://ai.azure.com), create an agent and enable the **Bing grounding** tool.
+2. From the agent's API details, copy the **Responses API endpoint URL** (format: `https://{resource}.services.ai.azure.com/api/projects/{project}/applications/{agent-name}/protocols/openai/responses`).
+3. Generate an **API key** for the Foundry project.
+4. Set the environment variables:
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `AZURE_FOUNDRY_BING_ENDPOINT` | ✅ | Full Responses API URL for the agent application | `https://aif-xxx.services.ai.azure.com/api/projects/proj-xxx/applications/Agent-Bing-Search/protocols/openai/responses` |
+| `AZURE_FOUNDRY_BING_API_KEY` | ✅ | API key for the Foundry project | `abc123...` |
+
+#### Tool: `search_bing`
+
+| Input | Type | Required | Description |
+|-------|------|----------|-------------|
+| `q` | string | ✅ | Natural language search query |
+| `count` | number | — | Hint for number of results (1–20) |
+
+Returns `{ message, content }` where `content` is the agent's synthesized answer.
 
 ## Creating a Plugin
 
