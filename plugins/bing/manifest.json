@@ -12,7 +12,6 @@
     "AZURE_FOUNDRY_BING_ENDPOINT",
     "AZURE_FOUNDRY_BING_API_KEY"
   ],
-  "optionalEnvVars": ["AZURE_FOUNDRY_BING_MODEL"],
   "configSchema": {
     "type": "object",
     "title": "Bing Search Configuration",

@@ -1,59 +1,15 @@
 import { tool, jsonSchema } from 'ai';
 import type { PluginContext, AnyTool, Locale, Source } from '../../../src/types';
-
-interface SearchBingParams {
-	q: string;
-}
+import type {
+	SearchBingParams,
+	ResponsesApiResponse,
+	AgentSource,
+	AgentStructuredResponse,
+	SearchBingResult
+} from './models';
 
 // Azure AI Foundry Responses API version
 const API_VERSION = '2025-11-15-preview';
-
-interface ResponsesApiOutput {
-	type: string;
-	role?: string;
-	content?: Array<{ type: string; text?: string }>;
-}
-
-interface ResponsesApiResponse {
-	output?: ResponsesApiOutput[];
-	status?: string;
-	error?: { message: string };
-}
-
-/** Structured response format returned by the Foundry agent */
-interface AgentSource {
-	id: string;
-	rank: number;
-	title: string;
-	url: string | null;
-	domain: string | null;
-	content: string;
-	date: string | null;
-	author: string | null;
-	publisher: string | null;
-	type: string | null;
-}
-
-interface AgentError {
-	code: string;
-	message: string;
-	details: string | null;
-}
-
-interface AgentStructuredResponse {
-	query: string;
-	message: string;
-	sources?: AgentSource[] | null;
-	summary?: string | null;
-	errors?: AgentError[];
-}
-
-/** Structured result returned to the application */
-interface SearchBingResult {
-	message: string;
-	sources?: Source[];
-	content?: string;
-}
 
 /**
  * Strip HTML tags from a string (the agent may use <strong> etc.)
@@ -92,10 +48,10 @@ function convertToSources(agentSources: AgentSource[]): Source[] {
 }
 
 const SEARCH_RESULTS_FOUND: Record<Locale, string> = {
-	fr: '{count} résultats trouvés.',
-	en: '{count} results found.',
-	es: '{count} resultados encontrados.',
-	zh: '找到 {count} 个结果。'
+	fr: '{count} résultats trouvés via Bing.',
+	en: '{count} results found via Bing.',
+	es: '{count} resultados encontrados en Bing.',
+	zh: '通过 Bing 找到 {count} 个结果。'
 };
 
 function searchResultsFoundMsg(locale: Locale | undefined, count: number): string {
@@ -121,7 +77,6 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 		execute: async (params): Promise<SearchBingResult> => {
 			const endpoint = context.env.AZURE_FOUNDRY_BING_ENDPOINT?.replace(/\/$/, '');
 			const apiKey = context.env.AZURE_FOUNDRY_BING_API_KEY;
-			const model = context.env.AZURE_FOUNDRY_BING_MODEL;
 
 			if (!endpoint || !apiKey) {
 				return {
@@ -135,9 +90,6 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 
 			const input = params.q;
 
-			const requestBody: Record<string, unknown> = { input };
-			if (model) requestBody.model = model;
-
 			try {
 				const response = await fetch(url, {
 					method: 'POST',
@@ -145,7 +97,7 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 						'Content-Type': 'application/json',
 						'api-key': apiKey
 					},
-					body: JSON.stringify(requestBody)
+					body: JSON.stringify({ input })
 				});
 
 				if (!response.ok) {

@@ -7,8 +7,6 @@
  *   AZURE_FOUNDRY_BING_ENDPOINT    - Full Responses API URL for the application
  *                                    e.g. https://aif-xxx.services.ai.azure.com/api/projects/proj-xxx/applications/Agent-Bing-Search/protocols/openai/responses
  *   AZURE_FOUNDRY_BING_API_KEY     - API key for the Azure AI Foundry project
- * Optional:
- *   AZURE_FOUNDRY_BING_MODEL       - Model deployment name (include if required by the endpoint)
  */
 
 import type { PluginExport, PluginToolDefinition } from '../../src/types';

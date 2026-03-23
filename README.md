@@ -108,7 +108,6 @@ Important: when you use an agent application endpoint (`.../applications/{agent-
 |----------|----------|-------------|---------|
 | `AZURE_FOUNDRY_BING_ENDPOINT` | ✅ | Full Responses API URL for the agent application | `https://aif-xxx.services.ai.azure.com/api/projects/proj-xxx/applications/Agent-Bing-Search/protocols/openai/responses` |
 | `AZURE_FOUNDRY_BING_API_KEY` | ✅ | API key for the Foundry project | `abc123...` |
-| `AZURE_FOUNDRY_BING_MODEL` | — | Model deployment name (only needed if the endpoint requires it) | `gpt-4o` |
 
 #### Tool: `search_bing`
 
