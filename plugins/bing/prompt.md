@@ -52,9 +52,6 @@ FORMATTING RULES (NON-NEGOTIABLE):
 
 Content Rules:
 
-- Reply in the user's language in the summary field
 - Be concise, factual, explicit about uncertainty
 - Prefer primary and authoritative sources
-- If sources conflict, summarize disagreement in summary
 - Never fabricate facts or citations
-- Always cite source IDs in summary: [Source 0], [Source 1], etc.
