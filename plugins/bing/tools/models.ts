@@ -40,7 +40,6 @@ export interface AgentStructuredResponse {
 	query: string;
 	message: string;
 	sources?: AgentSource[] | null;
-	summary?: string | null;
 	errors?: AgentError[];
 }
 
@@ -48,5 +47,4 @@ export interface AgentStructuredResponse {
 export interface SearchBingResult {
 	message: string;
 	sources?: Source[];
-	content?: string;
 }
