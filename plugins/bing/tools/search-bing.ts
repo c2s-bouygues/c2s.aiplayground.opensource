@@ -30,6 +30,15 @@ function extractDomain(url: string): string {
 }
 
 /**
+ * Rewrite 0-based [Source N] citations to 1-based so they match the app convention.
+ */
+function normalizeSourceCitations(text: string): string {
+	return text.replace(/\[Source\s+(\d+)\]/gi, (_match, num) => {
+		return `[Source ${parseInt(num, 10) + 1}]`;
+	});
+}
+
+/**
  * Convert the agent's raw source list to Source[] for UI source-citation display.
  */
 function convertToSources(agentSources: AgentSource[]): Source[] {
@@ -146,7 +155,7 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 					}
 
 					const sources = parsed.sources?.length ? convertToSources(parsed.sources) : undefined;
-					const content = parsed.summary ? stripHtml(parsed.summary) : undefined;
+					const content = parsed.summary ? normalizeSourceCitations(stripHtml(parsed.summary)) : undefined;
 
 					const count = sources?.length ?? 0;
 					const message = searchResultsFoundMsg(context.locale, count);
@@ -166,7 +175,7 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 					});
 					return {
 						message: searchResultsFoundMsg(context.locale, 0),
-						content: responseText
+						content: normalizeSourceCitations(responseText)
 					};
 				}
 			} catch (error) {
