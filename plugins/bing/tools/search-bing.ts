@@ -146,6 +146,8 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 					}
 
 					const sources = parsed.sources?.length ? convertToSources(parsed.sources) : undefined;
+					const content = parsed.summary ? stripHtml(parsed.summary) : undefined;
+
 					const count = sources?.length ?? 0;
 					const message = searchResultsFoundMsg(context.locale, count);
 
@@ -155,7 +157,7 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 						sourceCount: count
 					});
 
-					return { message, sources };
+					return { message, sources, content };
 				} catch {
 					// Plain-text response (agent did not return JSON)
 					context.logger.info('search_bing completed (plain text)', {
@@ -163,7 +165,8 @@ export function createSearchBingTool(context: PluginContext): AnyTool {
 						length: responseText.length
 					});
 					return {
-						message: searchResultsFoundMsg(context.locale, 0)
+						message: searchResultsFoundMsg(context.locale, 0),
+						content: responseText
 					};
 				}
 			} catch (error) {
