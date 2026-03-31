@@ -9,7 +9,7 @@ import type { Tool } from 'ai';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyTool = Tool<any, any>;
 
-export type Locale = 'fr' | 'en' | 'es' | 'zh';
+export type Locale = 'fr' | 'en' | 'es' | 'zh' | 'de';
 
 export interface ToolConfigProperty {
 	type: 'string' | 'number' | 'boolean' | 'array';
