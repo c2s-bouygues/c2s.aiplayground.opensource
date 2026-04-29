@@ -43,7 +43,7 @@ export interface ToolConfigValues {
  * Tool context passed from the main application
  */
 export interface ToolContext {
-	datasourceId: string | null;
+	datasourceIds: string[];
 	conversationId: string | null;
 	userId?: string | null;
 	userEmail?: string | null;

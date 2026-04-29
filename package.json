@@ -12,8 +12,8 @@
   "dependencies": {
     "@iconify/svelte": "^5.2.1",
     "@mozilla/readability": "^0.6.0",
-    "ai": "^6.0.153",
-    "bits-ui": "^2.17.2",
+    "ai": "^6.0.169",
+    "bits-ui": "^2.18.0",
     "clsx": "^2.1.1",
     "linkedom": "^0.18.12",
     "tailwind-merge": "^3.5.0",
@@ -23,16 +23,16 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^7.0.1",
-    "@sveltejs/kit": "^2.57.0",
+    "@sveltejs/kit": "^2.58.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "@tailwindcss/vite": "^4.2.2",
-    "@types/node": "^25.5.2",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^25.6.0",
     "@types/turndown": "^5.0.6",
-    "svelte": "^5.55.2",
+    "svelte": "^5.55.5",
     "svelte-check": "^4.4.6",
-    "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.7",
-    "vite-plugin-mkcert": "^1.17.10"
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vite-plugin-mkcert": "^2.0.0"
   }
 }
