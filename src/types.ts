@@ -70,6 +70,28 @@ export interface PluginStorageAPI {
 }
 
 /**
+ * Token payload exchanged with the generic plugin token store (plaintext on both sides;
+ * encryption is handled by the core).
+ */
+export interface PluginTokenPayload {
+	accessToken: string;
+	refreshToken?: string;
+	expiresAt?: Date;
+	scope?: string;
+	metadata?: Record<string, unknown>;
+}
+
+/**
+ * Generic OAuth token storage scoped to (userId, pluginId).
+ * `get()` auto-refreshes via `PluginExport.oauthHandlers.refresh` when needed.
+ */
+export interface PluginTokensAPI {
+	save: (tokens: PluginTokenPayload) => Promise<void>;
+	get: () => Promise<PluginTokenPayload | null>;
+	delete: () => Promise<void>;
+}
+
+/**
  * Extended context passed to plugin tools
  */
 export interface PluginContext extends ToolContext {
@@ -77,6 +99,7 @@ export interface PluginContext extends ToolContext {
 	env: Record<string, string | undefined>;
 	logger: PluginLogger;
 	storage: PluginStorageAPI;
+	tokens: PluginTokensAPI;
 }
 
 /**
@@ -114,6 +137,8 @@ export interface PluginToolDeclaration {
 	requiresDatasource?: boolean;
 	requiresMicrosoftAuth?: boolean;
 	requiresGmailAuth?: boolean;
+	/** Plugin-managed OAuth: value is the pluginId owning the OAuth flow. */
+	requiresPluginOAuth?: string;
 	systemPromptInstructions: string | { [locale: string]: string };
 }
 
@@ -152,6 +177,40 @@ export interface PluginToolDefinition {
 }
 
 /**
+ * OAuth handlers a plugin can declare to enable the generic per-user OAuth flow.
+ */
+export interface PluginOAuthHandlers {
+	buildAuthUrl: (params: {
+		redirectUri: string;
+		state: string;
+		config: ToolConfigValues;
+		env: Record<string, string | undefined>;
+	}) => string | Promise<string>;
+	exchangeCode: (params: {
+		code: string;
+		redirectUri: string;
+		config: ToolConfigValues;
+		env: Record<string, string | undefined>;
+	}) => Promise<{
+		accessToken: string;
+		refreshToken?: string;
+		expiresIn?: number;
+		scope?: string;
+		metadata?: Record<string, unknown>;
+	}>;
+	refresh?: (params: {
+		refreshToken: string;
+		config: ToolConfigValues;
+		env: Record<string, string | undefined>;
+	}) => Promise<{
+		accessToken: string;
+		refreshToken?: string;
+		expiresIn?: number;
+		scope?: string;
+	}>;
+}
+
+/**
  * Main plugin export interface
  */
 export interface PluginExport {
@@ -160,4 +219,5 @@ export interface PluginExport {
 	onLoad?: () => Promise<void>;
 	onUnload?: () => Promise<void>;
 	validateConfig?: (config: ToolConfigValues) => boolean | string;
+	oauthHandlers?: PluginOAuthHandlers;
 }
