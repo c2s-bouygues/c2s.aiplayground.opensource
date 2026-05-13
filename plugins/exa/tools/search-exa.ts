@@ -93,7 +93,7 @@ function searchResultsFoundMsg(locale: Locale | undefined, count: number): strin
 export function createSearchExaTool(context: PluginContext): AnyTool {
 	return tool({
 		description:
-			'Searches the web via Exa (neural + keyword search). Returns ranked sources with full page text and highlights. Use this for current web information when you need detailed sources to cite.',
+			'Neural/semantic web search via Exa. Returns ranked sources with full page text (up to 2000 chars) and highlights per result. Strong at conceptual or semantic queries ("articles ABOUT a topic", "what does the literature say on X"), finding pages that discuss a theme rather than just contain a keyword, technical or academic research, and any case where you need extensive page content for detailed citation.',
 		inputSchema: jsonSchema<SearchExaParams>({
 			type: 'object',
 			properties: {
