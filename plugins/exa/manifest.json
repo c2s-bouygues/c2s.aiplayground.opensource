@@ -1,0 +1,67 @@
+{
+	"id": "exa",
+	"name": "Exa Search",
+	"version": "1.0.0",
+	"description": "Neural and keyword web search powered by Exa, with direct synthesized answers and citations",
+	"author": "AI Playground",
+	"license": "MIT",
+	"icon": "mdi:search-web",
+	"category": "search",
+	"homepage": "https://exa.ai/",
+	"requiredEnvVars": ["EXA_API_KEY"],
+	"configSchema": {
+		"type": "object",
+		"title": "Exa Configuration",
+		"properties": {
+			"maxResults": {
+				"type": "number",
+				"title": "Max results",
+				"description": "Default number of results returned by search_exa (1-25).",
+				"default": 10,
+				"minimum": 1,
+				"maximum": 25
+			},
+			"searchType": {
+				"type": "string",
+				"title": "Search type",
+				"description": "auto lets Exa choose; neural is semantic search; keyword is traditional.",
+				"enum": ["auto", "neural", "keyword"],
+				"enumLabels": {
+					"auto": "Auto (recommended)",
+					"neural": "Neural (semantic)",
+					"keyword": "Keyword"
+				},
+				"default": "auto",
+				"x-ui-widget": "select"
+			},
+			"includeDomains": {
+				"type": "array",
+				"title": "Include domains (optional)",
+				"description": "Limit results to these domains. Comma-separated list, e.g. arxiv.org, nature.com"
+			},
+			"excludeDomains": {
+				"type": "array",
+				"title": "Exclude domains (optional)",
+				"description": "Exclude these domains from results. Comma-separated list."
+			}
+		}
+	},
+	"tools": [
+		{
+			"id": "search_exa",
+			"name": "Exa Web Search",
+			"description": "Semantic or keyword web search via Exa, returning ranked sources with full page text and highlights",
+			"systemPromptInstructions": {
+				"fr": "- exa_search_exa: Recherche web via Exa (neural ou keyword)\n  - Utilise-le pour trouver des informations actuelles sur internet avec sources détaillées\n  - Le résultat contient un message récapitulatif et des sources structurées (titre, URL, domaine, date, contenu/highlights)\n  - IMPORTANT: Utilise toutes les informations retournées par les sources pour répondre de manière complète et détaillée. Ne dis jamais que tu n'as pas les détails si le résultat contient des informations. Cite les sources par leur identifiant [Source X] et inclus les URLs.",
+				"en": "- exa_search_exa: Searches the web via Exa (neural or keyword)\n  - Use it to find current information on the internet with detailed sources\n  - The result contains a summary message and structured sources (title, URL, domain, date, text/highlights)\n  - IMPORTANT: Use ALL information from the returned sources to give a complete, detailed answer. Never say you don't have details if the result contains information. Cite sources by their ID [Source X] and include URLs.",
+				"es": "- exa_search_exa: Búsqueda web a través de Exa (neural o keyword)\n  - Úsalo para encontrar información actual en internet con fuentes detalladas\n  - El resultado contiene un mensaje resumen y fuentes estructuradas (título, URL, dominio, fecha, contenido/highlights)\n  - IMPORTANTE: Usa TODA la información de las fuentes devueltas para dar una respuesta completa y detallada. Nunca digas que no tienes detalles si el resultado contiene información. Cita las fuentes por su identificador [Source X] e incluye las URLs.",
+				"zh": "- exa_search_exa: 通过 Exa 进行网络搜索（神经或关键词）\n  - 使用它在互联网上查找当前信息，并获取详细来源\n  - 结果包含摘要消息和结构化来源（标题、URL、域名、日期、内容/高亮）\n  - 重要：使用返回来源中的所有信息给出完整、详细的回答。如果结果包含信息，绝不要说你没有细节。通过标识符 [Source X] 引用来源并包含 URL。",
+				"de": "- exa_search_exa: Websuche über Exa (neural oder keyword)\n  - Verwende es, um aktuelle Informationen im Internet mit detaillierten Quellen zu finden\n  - Das Ergebnis enthält eine Zusammenfassung und strukturierte Quellen (Titel, URL, Domain, Datum, Inhalt/Highlights)\n  - WICHTIG: Nutze ALLE Informationen aus den zurückgegebenen Quellen für eine vollständige, detaillierte Antwort. Sage niemals, dass du keine Details hast, wenn das Ergebnis Informationen enthält. Zitiere Quellen über ihre Kennung [Source X] und gib die URLs an."
+			}
+		}
+	],
+	"i18n": {
+		"supportedLocales": ["fr", "en", "es", "zh", "de"],
+		"defaultLocale": "fr"
+	}
+}

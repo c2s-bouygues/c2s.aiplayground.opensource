@@ -11,9 +11,10 @@ import weatherPlugin from '../../../plugins/weather';
 import pixabayPlugin from '../../../plugins/pixabay';
 import fetchPlugin from '../../../plugins/fetch';
 import bingPlugin from '../../../plugins/bing';
+import exaPlugin from '../../../plugins/exa';
 
 // Registry of loaded plugins
-const loadedPlugins: PluginExport[] = [weatherPlugin, pixabayPlugin, fetchPlugin, bingPlugin];
+const loadedPlugins: PluginExport[] = [weatherPlugin, pixabayPlugin, fetchPlugin, bingPlugin, exaPlugin];
 
 export interface PluginInfo {
 	id: string;
