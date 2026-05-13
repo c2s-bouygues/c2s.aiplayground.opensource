@@ -108,6 +108,8 @@ export interface PluginToolDeclaration {
 	name: string;
 	description: string;
 	category?: string;
+	/** Human-readable label for the category. Used by the UI when the category is dynamic and has no i18n entry. */
+	categoryLabel?: string;
 	icon?: string;
 	requiresDatasource?: boolean;
 	requiresMicrosoftAuth?: boolean;
