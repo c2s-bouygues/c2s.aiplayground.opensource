@@ -184,6 +184,11 @@ export interface PluginManifest {
 	tools: PluginToolDeclaration[];
 	/** Whether this plugin discovers tools dynamically at runtime (allows empty tools array) */
 	dynamicTools?: boolean;
+	/**
+	 * Skip automatic tool discovery on app startup AND on config-save.
+	 * Discovery is then only triggered manually (admin "Refresh tools" button).
+	 */
+	skipRefreshOnRestart?: boolean;
 	i18n?: {
 		supportedLocales: string[];
 		defaultLocale: string;
@@ -244,11 +249,13 @@ export interface PluginExport {
 	validateConfig?: (config: ToolConfigValues) => boolean | string;
 	/**
 	 * Optional: Discover tools dynamically at runtime (e.g., from remote MCP servers).
-	 * Called at startup and when plugin config changes.
+	 * Called at startup and when plugin config changes. `context.tokens` is provided
+	 * for user-scoped discovery (e.g. admin "Refresh tools"); absent at startup.
 	 */
 	discoverTools?: (
 		config: ToolConfigValues,
-		env: Record<string, string | undefined>
+		env: Record<string, string | undefined>,
+		context?: { tokens?: PluginTokensAPI }
 	) => Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
 	/** Optional: OAuth handlers for per-user authentication. */
 	oauthHandlers?: PluginOAuthHandlers;

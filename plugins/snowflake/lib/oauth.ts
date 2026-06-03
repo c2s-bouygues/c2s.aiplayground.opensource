@@ -1,13 +1,15 @@
 /**
  * Snowflake OAuth 2.0 (authorization-code grant, confidential client).
  *
- * Snowflake's managed MCP server requires per-user OAuth tokens. The
- * authorize / token endpoints default to the account URL but stay
- * overridable via plugin config so non-account-level OAuth integrations
- * (e.g. external Snowflake OAuth) can also be wired in.
+ * Per-account OAuth: a single Snowflake security integration's credentials
+ * sit at the top level of the plugin config and apply to every MCP server
+ * listed in `config.servers[]`. There is no env-var fallback — credentials
+ * are pure config so multiple plugin instances (different Snowflake accounts)
+ * could in principle coexist on the same host.
  *
- * Mirrors the shape of the azure_devops plugin's oauth.ts in
- * c2s.aiplayground/Chatbot.SvelteKit/internal-plugins/plugins/azure_devops/lib/oauth.ts.
+ * Per RFC 6749 §2.3.1 we send client_id/client_secret in the form body.
+ * Snowflake's token endpoint accepts that for CUSTOM CONFIDENTIAL clients
+ * (verified empirically — body-credentials work).
  */
 
 import type { ToolConfigValues, PluginOAuthHandlers } from '../../../src/types';
@@ -18,7 +20,7 @@ function trimTrailingSlash(url: string): string {
 	return url.replace(/\/+$/, '');
 }
 
-function resolveBaseUrl(config: ToolConfigValues): string {
+export function resolveBaseUrl(config: ToolConfigValues): string {
 	const raw = (config?.snowflakeBaseUrl as string | undefined)?.trim();
 	if (!raw) {
 		throw new Error('Snowflake plugin: "snowflakeBaseUrl" config is required');
@@ -46,18 +48,15 @@ function resolveScope(config: ToolConfigValues): string {
 	return raw && raw.length > 0 ? raw : DEFAULT_SCOPE;
 }
 
-function resolveCredentials(
-	config: ToolConfigValues,
-	env: Record<string, string | undefined>
-): { clientId: string; clientSecret: string } {
-	const clientId =
-		(config?.oauthClientId as string | undefined)?.trim() || env.SNOWFLAKE_OAUTH_CLIENT_ID;
-	const clientSecret =
-		(config?.oauthClientSecret as string | undefined)?.trim() ||
-		env.SNOWFLAKE_OAUTH_CLIENT_SECRET;
+function resolveCredentials(config: ToolConfigValues): {
+	clientId: string;
+	clientSecret: string;
+} {
+	const clientId = (config?.oauthClientId as string | undefined)?.trim();
+	const clientSecret = (config?.oauthClientSecret as string | undefined)?.trim();
 	if (!clientId || !clientSecret) {
 		throw new Error(
-			'Snowflake OAuth not configured: provide oauthClientId/oauthClientSecret in config or SNOWFLAKE_OAUTH_CLIENT_ID/SNOWFLAKE_OAUTH_CLIENT_SECRET env vars'
+			'Snowflake OAuth not configured: provide oauthClientId and oauthClientSecret in the plugin config (admin UI).'
 		);
 	}
 	return { clientId, clientSecret };
@@ -110,8 +109,8 @@ async function postTokenForm(url: string, body: URLSearchParams): Promise<TokenR
 }
 
 export const snowflakeOAuthHandlers: PluginOAuthHandlers = {
-	buildAuthUrl: ({ redirectUri, state, config, env }) => {
-		const { clientId } = resolveCredentials(config, env);
+	buildAuthUrl: ({ redirectUri, state, config }) => {
+		const { clientId } = resolveCredentials(config);
 		const params = new URLSearchParams({
 			client_id: clientId,
 			response_type: 'code',
@@ -122,8 +121,8 @@ export const snowflakeOAuthHandlers: PluginOAuthHandlers = {
 		return `${resolveAuthorizeUrl(config)}?${params.toString()}`;
 	},
 
-	exchangeCode: async ({ code, redirectUri, config, env }) => {
-		const { clientId, clientSecret } = resolveCredentials(config, env);
+	exchangeCode: async ({ code, redirectUri, config }) => {
+		const { clientId, clientSecret } = resolveCredentials(config);
 		const body = new URLSearchParams({
 			grant_type: 'authorization_code',
 			code,
@@ -148,8 +147,8 @@ export const snowflakeOAuthHandlers: PluginOAuthHandlers = {
 		};
 	},
 
-	refresh: async ({ refreshToken, config, env }) => {
-		const { clientId, clientSecret } = resolveCredentials(config, env);
+	refresh: async ({ refreshToken, config }) => {
+		const { clientId, clientSecret } = resolveCredentials(config);
 		const body = new URLSearchParams({
 			grant_type: 'refresh_token',
 			refresh_token: refreshToken,
@@ -166,20 +165,51 @@ export const snowflakeOAuthHandlers: PluginOAuthHandlers = {
 	}
 };
 
-export function resolveMcpServerPath(config: ToolConfigValues): string {
-	const raw = (config?.mcpServerPath as string | undefined)?.trim();
-	if (!raw) {
-		throw new Error('Snowflake plugin: "mcpServerPath" config is required');
+export interface SnowflakeServerConfig {
+	id: string;
+	name: string;
+	mcpServerPath: string;
+	enabled?: boolean;
+	timeoutSeconds?: number;
+}
+
+export function getServers(config: ToolConfigValues): SnowflakeServerConfig[] {
+	const raw = config?.servers;
+	if (!Array.isArray(raw)) return [];
+	return raw as SnowflakeServerConfig[];
+}
+
+export function getEnabledServers(config: ToolConfigValues): SnowflakeServerConfig[] {
+	return getServers(config).filter((s) => s.enabled !== false);
+}
+
+export function findServer(config: ToolConfigValues, serverId: string): SnowflakeServerConfig {
+	const server = getServers(config).find((s) => s.id === serverId);
+	if (!server) {
+		const available = getServers(config)
+			.map((s) => s.id)
+			.join(', ');
+		throw new Error(
+			`Snowflake plugin: server "${serverId}" not found. Available servers: ${available || '(none)'}`
+		);
 	}
-	return raw.startsWith('/') ? raw : `/${raw}`;
+	if (server.enabled === false) {
+		throw new Error(`Snowflake plugin: server "${serverId}" is disabled.`);
+	}
+	return server;
 }
 
-export function resolveMcpUrl(config: ToolConfigValues): string {
-	return `${resolveBaseUrl(config)}${resolveMcpServerPath(config)}`;
+export function resolveMcpUrl(config: ToolConfigValues, serverId: string): string {
+	const server = findServer(config, serverId);
+	const path = server.mcpServerPath.startsWith('/')
+		? server.mcpServerPath
+		: `/${server.mcpServerPath}`;
+	return `${resolveBaseUrl(config)}${path}`;
 }
 
-export function resolveTimeoutMs(config: ToolConfigValues): number {
-	const seconds = Number(config?.timeoutSeconds);
+export function resolveTimeoutMs(config: ToolConfigValues, serverId: string): number {
+	const server = findServer(config, serverId);
+	const seconds = Number(server.timeoutSeconds);
 	if (!Number.isFinite(seconds) || seconds <= 0) return 60_000;
 	return Math.round(seconds * 1000);
 }

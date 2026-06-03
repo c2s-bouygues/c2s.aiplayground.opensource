@@ -147,29 +147,31 @@ async function mcpCall<T>(
 
 export async function listTools(
 	config: ToolConfigValues,
+	serverId: string,
 	token: string
 ): Promise<McpToolDescriptor[]> {
 	const result = await mcpCall<{ tools: McpToolDescriptor[] }>(
-		resolveMcpUrl(config),
+		resolveMcpUrl(config, serverId),
 		token,
 		'tools/list',
 		{},
-		resolveTimeoutMs(config)
+		resolveTimeoutMs(config, serverId)
 	);
 	return result.tools || [];
 }
 
 export async function callTool(
 	config: ToolConfigValues,
+	serverId: string,
 	token: string,
 	name: string,
 	args: Record<string, unknown>
 ): Promise<McpToolCallResult> {
 	return mcpCall<McpToolCallResult>(
-		resolveMcpUrl(config),
+		resolveMcpUrl(config, serverId),
 		token,
 		'tools/call',
 		{ name, arguments: args },
-		resolveTimeoutMs(config)
+		resolveTimeoutMs(config, serverId)
 	);
 }

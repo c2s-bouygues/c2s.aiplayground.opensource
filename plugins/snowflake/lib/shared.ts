@@ -1,18 +1,14 @@
 /**
  * Runtime resolution + runTool wrapper for the Snowflake plugin.
  *
- * Mirrors the pattern used by the azure_devops plugin
- * (c2s.aiplayground/Chatbot.SvelteKit/internal-plugins/plugins/azure_devops/lib/shared.ts):
- * every tool's execute body is wrapped so any thrown error becomes a structured
- * { success: false, message } payload instead of bubbling up to the host.
+ * Every tool's execute body is wrapped so any thrown error becomes a
+ * structured { success: false, message } payload instead of bubbling up.
  */
 
 import type { PluginContext, ToolConfigValues } from '../../../src/types';
-import { resolveMcpUrl } from './oauth';
 
 export interface SnowflakeRuntime {
 	token: string;
-	mcpUrl: string;
 	config: ToolConfigValues;
 }
 
@@ -35,7 +31,6 @@ export async function getSnowflakeRuntime(ctx: PluginContext): Promise<Snowflake
 	}
 	return {
 		token: token.accessToken,
-		mcpUrl: resolveMcpUrl(ctx.pluginConfig),
 		config: ctx.pluginConfig
 	};
 }
