@@ -23,13 +23,24 @@ import type {
 	PluginExport,
 	PluginToolDefinition,
 	PluginToolDeclaration,
-	ToolConfigValues
+	ToolConfigValues,
+	DiscoveredToolSnapshot,
+	JsonValue
 } from '../../src/types';
 import manifest from './manifest.json';
 import { snowflakeOAuthHandlers, getEnabledServers } from './lib/oauth';
 import { SnowflakeNotConnectedError } from './lib/shared';
-import { listTools } from './lib/mcp-client';
-import { createSnowflakeProxyTool } from './tools/proxy';
+import { listTools, type McpToolDescriptor } from './lib/mcp-client';
+import {
+	createSnowflakeProxyTool,
+	buildSnowflakeProxyToolDef
+} from './tools/proxy';
+
+/** Routing data stored in each snapshot entry's `meta` so a tool can be rebuilt on restore. */
+interface SnowflakeToolMeta {
+	serverId: string;
+	name: string;
+}
 
 const plugin: PluginExport = {
 	manifest: manifest as PluginExport['manifest'],
@@ -102,7 +113,11 @@ const plugin: PluginExport = {
 		config: ToolConfigValues,
 		_env: Record<string, string | undefined>,
 		context?: { tokens?: import('../../src/types').PluginTokensAPI }
-	): Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }> {
+	): Promise<{
+		tools: PluginToolDefinition[];
+		declarations: PluginToolDeclaration[];
+		snapshot?: DiscoveredToolSnapshot[];
+	}> {
 		const token = (await context?.tokens?.get())?.accessToken;
 		if (!token) {
 			// Surfaced to the admin as a "connect first" message by the refresh endpoint.
@@ -112,6 +127,7 @@ const plugin: PluginExport = {
 		const servers = getEnabledServers(config);
 		const tools: PluginToolDefinition[] = [];
 		const declarations: PluginToolDeclaration[] = [];
+		const snapshot: DiscoveredToolSnapshot[] = [];
 
 		for (const server of servers) {
 			try {
@@ -120,6 +136,11 @@ const plugin: PluginExport = {
 					const { toolDef, declaration } = createSnowflakeProxyTool(server, descriptor);
 					tools.push(toolDef);
 					declarations.push(declaration);
+					snapshot.push({
+						declaration,
+						inputSchema: descriptor.inputSchema as JsonValue,
+						meta: { serverId: server.id, name: descriptor.name }
+					});
 				}
 				console.log(
 					`[snowflake] Discovered ${descriptors.length} tools from "${server.name}" (${server.id})`
@@ -127,6 +148,34 @@ const plugin: PluginExport = {
 			} catch (err) {
 				console.error(`[snowflake] Tool discovery failed for server "${server.id}":`, err);
 			}
+		}
+
+		return { tools, declarations, snapshot };
+	},
+
+	rehydrateTools(
+		config: ToolConfigValues,
+		_env: Record<string, string | undefined>,
+		snapshot: DiscoveredToolSnapshot[]
+	): { tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] } {
+		// Only rebuild tools for servers still present and enabled in the current config.
+		const serversById = new Map(getEnabledServers(config).map((s) => [s.id, s]));
+		const tools: PluginToolDefinition[] = [];
+		const declarations: PluginToolDeclaration[] = [];
+
+		for (const entry of snapshot) {
+			const meta = entry.meta as SnowflakeToolMeta | null;
+			if (!meta?.serverId || !meta?.name) continue;
+			const server = serversById.get(meta.serverId);
+			if (!server) continue;
+			const toolDef = buildSnowflakeProxyToolDef(
+				server,
+				meta.name,
+				entry.inputSchema as McpToolDescriptor['inputSchema'],
+				entry.declaration.description
+			);
+			tools.push(toolDef);
+			declarations.push(entry.declaration);
 		}
 
 		return { tools, declarations };
