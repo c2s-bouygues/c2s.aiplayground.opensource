@@ -9,6 +9,15 @@ import type { Tool } from 'ai';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyTool = Tool<any, any>;
 
+/** Any JSON-serializable value — the shape a plugin tool snapshot must take to be persisted. */
+export type JsonValue =
+	| string
+	| number
+	| boolean
+	| null
+	| JsonValue[]
+	| { [key: string]: JsonValue };
+
 export type Locale = 'fr' | 'en' | 'es' | 'zh' | 'de';
 
 export interface ToolConfigProperty {
@@ -239,6 +248,18 @@ export interface PluginOAuthHandlers {
 }
 
 /**
+ * One discovered tool in a serializable form the core persists, so plugins with
+ * `skipRefreshOnRestart` can rebuild their tools after a restart without re-contacting the
+ * remote server. `declaration` is restored as-is; `inputSchema` + `meta` rebuild the executable
+ * tool (`meta` is plugin-specific routing, e.g. server id + upstream tool name).
+ */
+export interface DiscoveredToolSnapshot {
+	declaration: PluginToolDeclaration;
+	inputSchema: JsonValue;
+	meta: JsonValue;
+}
+
+/**
  * Main plugin export interface
  */
 export interface PluginExport {
@@ -256,7 +277,23 @@ export interface PluginExport {
 		config: ToolConfigValues,
 		env: Record<string, string | undefined>,
 		context?: { tokens?: PluginTokensAPI }
-	) => Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
+	) => Promise<{
+		tools: PluginToolDefinition[];
+		declarations: PluginToolDeclaration[];
+		/** Optional serializable snapshot persisted by the core for restart restore. */
+		snapshot?: DiscoveredToolSnapshot[];
+	}>;
+	/**
+	 * Optional: rebuild previously-discovered tools from a serialized snapshot, without
+	 * contacting the remote server. Used at startup for plugins with `skipRefreshOnRestart`.
+	 */
+	rehydrateTools?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		snapshot: DiscoveredToolSnapshot[]
+	) =>
+		| { tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }
+		| Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
 	/** Optional: OAuth handlers for per-user authentication. */
 	oauthHandlers?: PluginOAuthHandlers;
 }

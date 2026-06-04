@@ -46,20 +46,65 @@ function flattenContent(content: McpContentItem[]): string {
 }
 
 /**
- * Build a proxy tool + declaration for one discovered Snowflake MCP tool on a server.
+ * Build the executable proxy tool (no declaration) for a single upstream Snowflake tool.
+ * Shared by live discovery and snapshot restore — the executor uses the *chat user's* token.
  */
-export function createSnowflakeProxyTool(
+export function buildSnowflakeProxyToolDef(
+	server: SnowflakeServerConfig,
+	toolName: string,
+	inputSchema: McpToolDescriptor['inputSchema'],
+	llmDescription: string
+): PluginToolDefinition {
+	const toolId = `${sanitizeToolId(server.id)}_${sanitizeToolId(toolName)}`;
+	return {
+		id: toolId,
+		createTool: (ctx: PluginContext): AnyTool =>
+			tool({
+				description: llmDescription,
+				inputSchema: jsonSchema<Record<string, unknown>>(inputSchema),
+				execute: async (args) =>
+					runTool(ctx, async ({ token, config }) => {
+						const result = await callTool(
+							config,
+							server.id,
+							token,
+							toolName,
+							(args as Record<string, unknown>) ?? {}
+						);
+						const text = flattenContent(result.content ?? []);
+						if (result.isError) {
+							return {
+								success: false as const,
+								serverId: server.id,
+								name: toolName,
+								message: text || `Snowflake MCP tool "${toolName}" returned an error`,
+								content: result.content
+							};
+						}
+						return {
+							success: true as const,
+							serverId: server.id,
+							name: toolName,
+							text,
+							content: result.content
+						};
+					})
+			}),
+		isAvailable: () => server.enabled !== false
+	};
+}
+
+/** Build the UI/LLM declaration for a discovered Snowflake tool. */
+export function buildSnowflakeDeclaration(
 	server: SnowflakeServerConfig,
 	descriptor: McpToolDescriptor
-): { toolDef: PluginToolDefinition; declaration: PluginToolDeclaration } {
-	const toolId = `${sanitizeToolId(server.id)}_${sanitizeToolId(descriptor.name)}`;
+): PluginToolDeclaration {
 	const description = descriptor.description ?? '';
-	const shortDesc = truncate(description, 120);
-
-	const declaration: PluginToolDeclaration = {
+	const toolId = `${sanitizeToolId(server.id)}_${sanitizeToolId(descriptor.name)}`;
+	return {
 		id: toolId,
 		name: descriptor.name,
-		description: `[${server.name}] ${shortDesc}`,
+		description: `[${server.name}] ${truncate(description, 120)}`,
 		category: `snowflake_${sanitizeToolId(server.id)}`,
 		categoryLabel: server.name,
 		icon: 'simple-icons:snowflake',
@@ -69,43 +114,21 @@ export function createSnowflakeProxyTool(
 			en: `- ${toolId}: ${description} (via Snowflake MCP server "${server.name}")`
 		}
 	};
+}
 
-	const toolDef: PluginToolDefinition = {
-		id: toolId,
-		createTool: (ctx: PluginContext): AnyTool =>
-			tool({
-				description: `[${server.name}] ${description}`,
-				inputSchema: jsonSchema<Record<string, unknown>>(descriptor.inputSchema),
-				execute: async (args) =>
-					runTool(ctx, async ({ token, config }) => {
-						const result = await callTool(
-							config,
-							server.id,
-							token,
-							descriptor.name,
-							(args as Record<string, unknown>) ?? {}
-						);
-						const text = flattenContent(result.content ?? []);
-						if (result.isError) {
-							return {
-								success: false as const,
-								serverId: server.id,
-								name: descriptor.name,
-								message: text || `Snowflake MCP tool "${descriptor.name}" returned an error`,
-								content: result.content
-							};
-						}
-						return {
-							success: true as const,
-							serverId: server.id,
-							name: descriptor.name,
-							text,
-							content: result.content
-						};
-					})
-			}),
-		isAvailable: () => server.enabled !== false
-	};
-
+/**
+ * Build a proxy tool + declaration for one discovered Snowflake MCP tool on a server.
+ */
+export function createSnowflakeProxyTool(
+	server: SnowflakeServerConfig,
+	descriptor: McpToolDescriptor
+): { toolDef: PluginToolDefinition; declaration: PluginToolDeclaration } {
+	const declaration = buildSnowflakeDeclaration(server, descriptor);
+	const toolDef = buildSnowflakeProxyToolDef(
+		server,
+		descriptor.name,
+		descriptor.inputSchema,
+		`[${server.name}] ${descriptor.description ?? ''}`
+	);
 	return { toolDef, declaration };
 }
