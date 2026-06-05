@@ -3,6 +3,7 @@ import type { PluginContext, AnyTool } from '../../../src/types';
 import TurndownService from 'turndown';
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import { safeFetch, SsrfError } from '../lib/ssrf';
 
 interface FetchUrlParams {
 	url: string;
@@ -117,12 +118,13 @@ export function createFetchUrlTool(context: PluginContext): AnyTool {
 			context.logger.info('Fetching URL', { url, maxLength, startIndex, raw });
 
 			try {
-				const response = await fetch(url, {
+				// safeFetch valide l'URL et chaque redirection contre les plages reseau
+				// internes/reservees (protection SSRF). Voir ../lib/ssrf.ts.
+				const response = await safeFetch(url, {
 					headers: {
 						'User-Agent': userAgent,
 						Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-					},
-					redirect: 'follow'
+					}
 				});
 
 				if (!response.ok) {
@@ -164,6 +166,20 @@ export function createFetchUrlTool(context: PluginContext): AnyTool {
 						: `Contenu recupere (${fullLength} caracteres)`
 				};
 			} catch (error) {
+				// Acces a une ressource interne bloque par la protection SSRF
+				if (error instanceof SsrfError) {
+					context.logger.warn('Blocked SSRF attempt', { url, reason: error.message });
+					return {
+						url,
+						content: `Acces refuse : cette URL pointe vers une ressource interne ou non autorisee. ${error.message}`,
+						contentType: 'text/plain',
+						contentLength: 0,
+						startIndex: 0,
+						truncated: false,
+						message: `Acces refuse : ${error.message}`
+					};
+				}
+
 				const errorMsg = error instanceof Error ? error.message : String(error);
 				context.logger.error('Fetch error', { url, error: errorMsg });
 				return {
