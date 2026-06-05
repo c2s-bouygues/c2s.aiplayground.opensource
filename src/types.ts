@@ -9,18 +9,38 @@ import type { Tool } from 'ai';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyTool = Tool<any, any>;
 
+/** Any JSON-serializable value — the shape a plugin tool snapshot must take to be persisted. */
+export type JsonValue =
+	| string
+	| number
+	| boolean
+	| null
+	| JsonValue[]
+	| { [key: string]: JsonValue };
+
 export type Locale = 'fr' | 'en' | 'es' | 'zh' | 'de';
 
 export interface ToolConfigProperty {
-	type: 'string' | 'number' | 'boolean' | 'array';
-	title: string;
+	type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+	title?: string;
 	description?: string;
 	default?: unknown;
 	enum?: (string | number)[];
 	enumLabels?: Record<string, string>;
 	minimum?: number;
 	maximum?: number;
-	'x-ui-widget'?: 'select' | 'radio' | 'checkbox' | 'slider' | 'textarea' | 'icon-select' | 'image-select';
+	items?: ToolConfigProperty;
+	properties?: Record<string, ToolConfigProperty>;
+	required?: string[];
+	additionalProperties?: boolean | ToolConfigProperty;
+	'x-ui-widget'?:
+		| 'select'
+		| 'radio'
+		| 'checkbox'
+		| 'slider'
+		| 'textarea'
+		| 'icon-select'
+		| 'image-select';
 	'x-ui-icon'?: string;
 	'x-ui-preview'?: string;
 	'x-ui-order'?: number;
@@ -29,14 +49,15 @@ export interface ToolConfigProperty {
 
 export interface ToolConfigSchema {
 	type: 'object';
-	title: string;
+	title?: string;
 	description?: string;
 	properties: Record<string, ToolConfigProperty>;
 	required?: string[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ToolConfigValues {
-	[key: string]: string | number | boolean | string[] | null;
+	[key: string]: any;
 }
 
 /**
@@ -45,10 +66,18 @@ export interface ToolConfigValues {
 export interface ToolContext {
 	datasourceIds: string[];
 	conversationId: string | null;
+	/**
+	 * Agent ID when the conversation is linked to an agent. Used by smolagent tools
+	 * to load agent attachments (files persisted at agent level) into /workspace/files/.
+	 */
+	agentId?: string | null;
 	userId?: string | null;
 	userEmail?: string | null;
 	toolOptions?: Record<string, string>;
 	locale?: Locale;
+	// Note: the core ToolContext also carries `alwaysApproveToolNames?: Set<string>`.
+	// It is intentionally omitted here — it's a core approval-orchestration concern
+	// (decides `needsApproval` wrapping), not part of the plugin contract.
 }
 
 /**
@@ -137,6 +166,7 @@ export interface PluginToolDeclaration {
 	requiresDatasource?: boolean;
 	requiresMicrosoftAuth?: boolean;
 	requiresGmailAuth?: boolean;
+	requiresSharepointAuth?: boolean;
 	/** Plugin-managed OAuth: value is the pluginId owning the OAuth flow. */
 	requiresPluginOAuth?: string;
 	systemPromptInstructions: string | { [locale: string]: string };
@@ -161,6 +191,13 @@ export interface PluginManifest {
 	optionalEnvVars?: string[];
 	configSchema?: ToolConfigSchema;
 	tools: PluginToolDeclaration[];
+	/** Whether this plugin discovers tools dynamically at runtime (allows empty tools array) */
+	dynamicTools?: boolean;
+	/**
+	 * Skip automatic tool discovery on app startup AND on config-save.
+	 * Discovery is then only triggered manually (admin "Refresh tools" button).
+	 */
+	skipRefreshOnRestart?: boolean;
 	i18n?: {
 		supportedLocales: string[];
 		defaultLocale: string;
@@ -211,6 +248,18 @@ export interface PluginOAuthHandlers {
 }
 
 /**
+ * One discovered tool in a serializable form the core persists, so plugins with
+ * `skipRefreshOnRestart` can rebuild their tools after a restart without re-contacting the
+ * remote server. `declaration` is restored as-is; `inputSchema` + `meta` rebuild the executable
+ * tool (`meta` is plugin-specific routing, e.g. server id + upstream tool name).
+ */
+export interface DiscoveredToolSnapshot {
+	declaration: PluginToolDeclaration;
+	inputSchema: JsonValue;
+	meta: JsonValue;
+}
+
+/**
  * Main plugin export interface
  */
 export interface PluginExport {
@@ -219,5 +268,32 @@ export interface PluginExport {
 	onLoad?: () => Promise<void>;
 	onUnload?: () => Promise<void>;
 	validateConfig?: (config: ToolConfigValues) => boolean | string;
+	/**
+	 * Optional: Discover tools dynamically at runtime (e.g., from remote MCP servers).
+	 * Called at startup and when plugin config changes. `context.tokens` is provided
+	 * for user-scoped discovery (e.g. admin "Refresh tools"); absent at startup.
+	 */
+	discoverTools?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		context?: { tokens?: PluginTokensAPI }
+	) => Promise<{
+		tools: PluginToolDefinition[];
+		declarations: PluginToolDeclaration[];
+		/** Optional serializable snapshot persisted by the core for restart restore. */
+		snapshot?: DiscoveredToolSnapshot[];
+	}>;
+	/**
+	 * Optional: rebuild previously-discovered tools from a serialized snapshot, without
+	 * contacting the remote server. Used at startup for plugins with `skipRefreshOnRestart`.
+	 */
+	rehydrateTools?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		snapshot: DiscoveredToolSnapshot[]
+	) =>
+		| { tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }
+		| Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
+	/** Optional: OAuth handlers for per-user authentication. */
 	oauthHandlers?: PluginOAuthHandlers;
 }

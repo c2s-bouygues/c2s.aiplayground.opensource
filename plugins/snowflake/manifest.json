@@ -1,0 +1,103 @@
+{
+  "id": "snowflake",
+  "name": "Snowflake MCP",
+  "version": "2.0.0",
+  "description": "Dynamically discovers and exposes the tools of one or more Snowflake Cortex Agents MCP servers (JSON-RPC 2.0 over HTTP). All MCP servers share a single Snowflake account and OAuth integration; the `servers[]` array lists the individual MCP endpoints (database/schema/mcp_server) to expose. Tools are discovered on demand (admin Connect + Refresh) and execute per-user.",
+  "dynamicTools": true,
+  "skipRefreshOnRestart": true,
+  "author": "AI Playground",
+  "license": "MIT",
+  "icon": "simple-icons:snowflake",
+  "category": "data",
+  "homepage": "https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp",
+  "requiredEnvVars": [],
+  "optionalEnvVars": [],
+  "configSchema": {
+    "type": "object",
+    "title": "Snowflake MCP Configuration",
+    "properties": {
+      "snowflakeBaseUrl": {
+        "type": "string",
+        "title": "Snowflake Account URL",
+        "description": "Base URL of your Snowflake account, e.g. https://xy12345.snowflakecomputing.com"
+      },
+      "oauthAuthorizeUrl": {
+        "type": "string",
+        "title": "OAuth Authorize URL",
+        "description": "Snowflake OAuth authorize endpoint. Default: <snowflakeBaseUrl>/oauth/authorize"
+      },
+      "oauthTokenUrl": {
+        "type": "string",
+        "title": "OAuth Token URL",
+        "description": "Snowflake OAuth token endpoint. Default: <snowflakeBaseUrl>/oauth/token-request"
+      },
+      "oauthClientId": {
+        "type": "string",
+        "title": "OAuth Client ID",
+        "description": "OAUTH_CLIENT_ID from SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('<integration_name>')."
+      },
+      "oauthClientSecret": {
+        "type": "string",
+        "title": "OAuth Client Secret",
+        "description": "OAUTH_CLIENT_SECRET (or OAUTH_CLIENT_SECRET_2) from SYSTEM$SHOW_OAUTH_CLIENT_SECRETS.",
+        "x-ui-widget": "textarea"
+      },
+      "oauthScope": {
+        "type": "string",
+        "title": "OAuth Scope",
+        "description": "OAuth scope. Default: 'session:role-any refresh_token'. Use 'session:role:<ROLE>' to pin a specific role.",
+        "default": "session:role-any refresh_token"
+      },
+      "servers": {
+        "type": "array",
+        "title": "MCP Servers",
+        "description": "List of Snowflake managed MCP servers to expose. All share the OAuth credentials above.",
+        "items": {
+          "type": "object",
+          "required": ["id", "name", "mcpServerPath"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "title": "Server ID",
+              "description": "Unique identifier used by tools to target this server (lowercase, e.g. 'analytics_cortex')"
+            },
+            "name": {
+              "type": "string",
+              "title": "Display Name",
+              "description": "Human-readable name for the server"
+            },
+            "mcpServerPath": {
+              "type": "string",
+              "title": "MCP Server Path",
+              "description": "Path of the managed MCP server, e.g. /api/v2/databases/MY_DB/schemas/MY_SCHEMA/mcp-servers/MY_MCP"
+            },
+            "enabled": {
+              "type": "boolean",
+              "title": "Enabled",
+              "default": true
+            },
+            "timeoutSeconds": {
+              "type": "number",
+              "title": "Timeout (seconds)",
+              "description": "Maximum time for a tool call to this server.",
+              "default": 60,
+              "minimum": 5,
+              "maximum": 600
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "snowflakeBaseUrl",
+      "oauthClientId",
+      "oauthClientSecret",
+      "servers"
+    ]
+  },
+  "tools": [],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}
