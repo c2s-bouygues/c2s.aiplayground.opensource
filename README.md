@@ -90,6 +90,7 @@ Open http://localhost:5173 in your browser to access the Plugin Playground.
 | `pixabay` | search | Search for royalty-free images via Pixabay | `PIXABAY_API_KEY` | Ready |
 | `fetch` | utility | Fetch and parse web page content as Markdown | — | Ready |
 | `bing` | search | Web search via an Azure AI Foundry agent with Bing grounding | `AZURE_FOUNDRY_BING_ENDPOINT` `AZURE_FOUNDRY_BING_API_KEY` | Ready |
+| `staan` | search | AI-optimized web search via Staan (Qwant) with semantically scored snippets | `STAAN_API_KEY` (fallback — key is a plugin config param) | Ready |
 
 ## Creating a Plugin
 
