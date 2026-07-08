@@ -4,7 +4,7 @@
  * Dynamically loads plugins from the plugins/ directory
  */
 
-import type { PluginExport, PluginContext, PluginLogger, PluginStorageAPI, ToolConfigValues } from '../../types';
+import type { PluginExport, PluginContext, PluginLogger, PluginStorageAPI, PluginTokensAPI, ToolConfigValues } from '../../types';
 
 // Import plugins statically (Vite doesn't support dynamic imports from fs in dev)
 import weatherPlugin from '../../../plugins/weather';
@@ -99,6 +99,14 @@ function createMockStorage(pluginId: string): PluginStorageAPI {
 	};
 }
 
+function createMockTokens(): PluginTokensAPI {
+	return {
+		save: async () => {},
+		get: async () => null,
+		delete: async () => {}
+	};
+}
+
 export interface ExecuteToolOptions {
 	pluginId: string;
 	toolId: string;
@@ -127,7 +135,8 @@ export async function executeTool(options: ExecuteToolOptions): Promise<unknown>
 
 	// Create mock context
 	const context: PluginContext = {
-		datasourceId: null,
+		datasourceIds: [],
+		workspaceIds: [],
 		conversationId: 'test-conversation-' + Date.now(),
 		userId: 'test-user',
 		userEmail: 'test@example.com',
@@ -135,7 +144,8 @@ export async function executeTool(options: ExecuteToolOptions): Promise<unknown>
 		pluginConfig: config,
 		env,
 		logger: createMockLogger(pluginId),
-		storage: createMockStorage(pluginId)
+		storage: createMockStorage(pluginId),
+		tokens: createMockTokens()
 	};
 
 	// Create and execute the tool
@@ -158,12 +168,14 @@ export function getToolInputSchema(pluginId: string, toolId: string): object | n
 
 	// Create a minimal context to get the tool instance
 	const context: PluginContext = {
-		datasourceId: null,
+		datasourceIds: [],
+		workspaceIds: [],
 		conversationId: null,
 		pluginConfig: {},
 		env: {},
 		logger: createMockLogger(pluginId),
-		storage: createMockStorage(pluginId)
+		storage: createMockStorage(pluginId),
+		tokens: createMockTokens()
 	};
 
 	const tool = toolDef.createTool(context);

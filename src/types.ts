@@ -65,6 +65,7 @@ export interface ToolConfigValues {
  */
 export interface ToolContext {
 	datasourceIds: string[];
+	workspaceIds: string[];
 	conversationId: string | null;
 	/**
 	 * Agent ID when the conversation is linked to an agent. Used by smolagent tools
@@ -164,6 +165,7 @@ export interface PluginToolDeclaration {
 	categoryLabel?: string;
 	icon?: string;
 	requiresDatasource?: boolean;
+	requiresWorkspace?: boolean;
 	requiresMicrosoftAuth?: boolean;
 	requiresGmailAuth?: boolean;
 	requiresSharepointAuth?: boolean;
