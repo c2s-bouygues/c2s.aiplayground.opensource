@@ -281,6 +281,21 @@ export interface DiscoveredToolSnapshot {
 }
 
 /**
+ * A prompt exposed by a plugin as an external "skill" (e.g. an MCP `prompts` entry
+ * from a remote server). Fully serializable — doubles as its own snapshot; the prompt
+ * CONTENT is always fetched live at invocation time via `getPromptContent`.
+ */
+export interface PluginPromptDeclaration {
+	/** Globally unique skill id, e.g. '<pluginId>:<serverId>:<promptName>' */
+	id: string;
+	/** Display name (title if provided by the source, else the prompt name) */
+	name: string;
+	description?: string;
+	/** Plugin-specific routing needed to fetch the content (e.g. `{ serverId, promptName }`) */
+	meta: JsonValue;
+}
+
+/**
  * Main plugin export interface
  */
 export interface PluginExport {
@@ -315,6 +330,26 @@ export interface PluginExport {
 	) =>
 		| { tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }
 		| Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
+	/**
+	 * Optional: discover prompts exposed by the plugin's sources (e.g. MCP `prompts/list`).
+	 * Discovered prompts surface as external, read-only skills. Same trigger points and
+	 * user-token semantics as `discoverTools`.
+	 */
+	discoverPrompts?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		context?: { tokens?: PluginTokensAPI }
+	) => Promise<{ prompts: PluginPromptDeclaration[] }>;
+	/**
+	 * Optional: fetch the current content of a discovered prompt at invocation time
+	 * (e.g. MCP `prompts/get`). Should throw on failure — the caller degrades gracefully.
+	 */
+	getPromptContent?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		meta: JsonValue,
+		context?: { tokens?: PluginTokensAPI }
+	) => Promise<string>;
 	/** Optional: OAuth handlers for per-user authentication. */
 	oauthHandlers?: PluginOAuthHandlers;
 	/**
