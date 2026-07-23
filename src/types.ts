@@ -114,11 +114,13 @@ export interface PluginTokenPayload {
 /**
  * Generic OAuth token storage scoped to (userId, pluginId).
  * `get()` auto-refreshes via `PluginExport.oauthHandlers.refresh` when needed.
+ * `providerKey` selects a per-provider token within the plugin (e.g. one per remote MCP
+ * server); omit for the plugin-wide default provider ('').
  */
 export interface PluginTokensAPI {
-	save: (tokens: PluginTokenPayload) => Promise<void>;
-	get: () => Promise<PluginTokenPayload | null>;
-	delete: () => Promise<void>;
+	save: (tokens: PluginTokenPayload, providerKey?: string) => Promise<void>;
+	get: (providerKey?: string) => Promise<PluginTokenPayload | null>;
+	delete: (providerKey?: string) => Promise<void>;
 }
 
 /**
@@ -171,6 +173,11 @@ export interface PluginToolDeclaration {
 	requiresSharepointAuth?: boolean;
 	/** Plugin-managed OAuth: value is the pluginId owning the OAuth flow. */
 	requiresPluginOAuth?: string;
+	/**
+	 * Per-provider OAuth key within the owning `requiresPluginOAuth` plugin (e.g. a remote_mcp
+	 * server id). Omitted/'' = the plugin-wide default provider.
+	 */
+	oauthProviderKey?: string;
 	systemPromptInstructions: string | { [locale: string]: string };
 }
 
@@ -219,17 +226,28 @@ export interface PluginToolDefinition {
  * OAuth handlers a plugin can declare to enable the generic per-user OAuth flow.
  */
 export interface PluginOAuthHandlers {
+	/**
+	 * Build the provider authorization URL. `providerKey` selects the per-provider config for
+	 * multi-provider plugins; `codeChallenge`/`codeChallengeMethod` carry the PKCE challenge
+	 * (RFC 7636 S256) when the host initiates a PKCE flow.
+	 */
 	buildAuthUrl: (params: {
 		redirectUri: string;
 		state: string;
 		config: ToolConfigValues;
 		env: Record<string, string | undefined>;
+		providerKey?: string;
+		codeChallenge?: string;
+		codeChallengeMethod?: 'S256';
 	}) => string | Promise<string>;
+	/** Exchange the authorization code for tokens. `codeVerifier` is the PKCE verifier. */
 	exchangeCode: (params: {
 		code: string;
 		redirectUri: string;
 		config: ToolConfigValues;
 		env: Record<string, string | undefined>;
+		providerKey?: string;
+		codeVerifier?: string;
 	}) => Promise<{
 		accessToken: string;
 		refreshToken?: string;
@@ -241,6 +259,7 @@ export interface PluginOAuthHandlers {
 		refreshToken: string;
 		config: ToolConfigValues;
 		env: Record<string, string | undefined>;
+		providerKey?: string;
 	}) => Promise<{
 		accessToken: string;
 		refreshToken?: string;
@@ -298,4 +317,10 @@ export interface PluginExport {
 		| Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
 	/** Optional: OAuth handlers for per-user authentication. */
 	oauthHandlers?: PluginOAuthHandlers;
+	/**
+	 * Optional: enumerate the plugin's OAuth providers for the current config. Multi-provider
+	 * plugins (e.g. remote_mcp: one provider per oauth server) return one entry per provider;
+	 * absent = a single default provider with key ''.
+	 */
+	listOAuthProviders?: (config: ToolConfigValues) => Array<{ key: string; label: string }>;
 }
