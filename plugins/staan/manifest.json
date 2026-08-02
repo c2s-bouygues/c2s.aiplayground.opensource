@@ -1,0 +1,80 @@
+{
+	"id": "staan",
+	"name": "Staan Web Search",
+	"version": "1.0.0",
+	"description": "AI-optimized web search via Staan (Qwant infrastructure, European/GDPR): ranked results enriched with semantically scored content chunks and optional full page content for RAG",
+	"author": "AI Playground",
+	"license": "MIT",
+	"icon": "hugeicons:internet",
+	"category": "search",
+	"homepage": "https://docs.staan.ai/",
+	"requiredEnvVars": [],
+	"optionalEnvVars": ["STAAN_API_KEY"],
+	"configSchema": {
+		"type": "object",
+		"title": "Staan Web Search Configuration",
+		"properties": {
+			"apiKey": {
+				"type": "string",
+				"title": "API Key",
+				"description": "Cle API Staan (Bearer token, https://staan.ai). Si vide, la variable d'environnement STAAN_API_KEY est utilisee."
+			},
+			"defaultMarket": {
+				"type": "string",
+				"title": "Marche par defaut",
+				"description": "Marche/locale par defaut des recherches. Le LLM peut le surcharger par requete.",
+				"enum": ["fr-fr", "en-us", "de-de"],
+				"default": "fr-fr",
+				"x-ui-widget": "select"
+			},
+			"maxSnippets": {
+				"type": "number",
+				"title": "Extraits max par resultat",
+				"description": "Nombre maximum de chunks scores retournes par URL (1-10)",
+				"default": 5,
+				"minimum": 1,
+				"maximum": 10
+			},
+			"minScore": {
+				"type": "number",
+				"title": "Score minimum",
+				"description": "Score de pertinence minimum des chunks (0-1). Recommande: 0.2",
+				"default": 0.2,
+				"minimum": 0,
+				"maximum": 1
+			},
+			"allowFullContent": {
+				"type": "boolean",
+				"title": "Autoriser le contenu complet",
+				"description": "Autorise le LLM a demander le corps complet des pages en Markdown (plus lent, plus de tokens)",
+				"default": true
+			},
+			"maxFullContentChars": {
+				"type": "number",
+				"title": "Taille max du contenu complet",
+				"description": "Troncature du contenu complet d'une page (en caracteres) avant envoi au LLM",
+				"default": 20000,
+				"minimum": 1000,
+				"maximum": 100000
+			}
+		}
+	},
+	"tools": [
+		{
+			"id": "search",
+			"name": "Staan Web Search",
+			"description": "Recherche web optimisée pour l'IA via Staan (Qwant) : résultats avec extraits sémantiquement scorés et contenu complet des pages",
+			"systemPromptInstructions": {
+				"fr": "- staan_search: Recherche web optimisée pour l'IA via l'API Staan (infrastructure Qwant, données européennes)\n  - UTILISE CET OUTIL pour: actualités, événements récents, informations factuelles susceptibles de changer, questions nécessitant des sources précises à citer\n  - Retourne des résultats enrichis de chunks de contenu sémantiquement scorés par rapport à la requête, réordonnés par pertinence\n  - Paramètres clés: q (requête, 400 caractères max), market (fr-fr, en-us, de-de), offset (pagination: 0/10/20/30), extra_snippets (chunks scorés, activé par défaut), full_content (corps complet en Markdown — uniquement si les extraits ne suffisent pas)\n  - Cite les sources par leur identifiant [Source X] et inclus les URLs",
+				"en": "- staan_search: AI-optimized web search via the Staan API (Qwant infrastructure, European data residency)\n  - USE THIS TOOL for: news, recent events, factual information that may change, questions requiring precise citable sources\n  - Returns results enriched with content chunks semantically scored against the query, reordered by relevance\n  - Key parameters: q (query, 400 chars max), market (fr-fr, en-us, de-de), offset (pagination: 0/10/20/30), extra_snippets (scored chunks, enabled by default), full_content (full page body as Markdown — only when snippets are not enough)\n  - Cite sources by their ID [Source X] and include URLs",
+				"es": "- staan_search: Búsqueda web optimizada para IA a través de la API Staan (infraestructura Qwant, datos europeos)\n  - USA ESTA HERRAMIENTA para: noticias, eventos recientes, información factual que puede cambiar, preguntas que requieren fuentes precisas para citar\n  - Devuelve resultados enriquecidos con fragmentos de contenido puntuados semánticamente respecto a la consulta, reordenados por relevancia\n  - Parámetros clave: q (consulta, 400 caracteres máx), market (fr-fr, en-us, de-de), offset (paginación: 0/10/20/30), extra_snippets (fragmentos puntuados, activado por defecto), full_content (cuerpo completo en Markdown — solo cuando los fragmentos no bastan)\n  - Cita las fuentes por su identificador [Source X] e incluye las URLs",
+				"zh": "- staan_search: 通过 Staan API 进行面向 AI 优化的网络搜索（Qwant 基础设施，欧洲数据驻留）\n  - 适用于: 新闻、近期事件、可能变化的事实信息、需要精确可引用来源的问题\n  - 返回的结果附带按查询语义评分的内容片段，并按相关性重新排序\n  - 关键参数: q (查询, 最多 400 字符), market (fr-fr, en-us, de-de), offset (分页: 0/10/20/30), extra_snippets (评分片段, 默认启用), full_content (Markdown 格式的完整页面内容 — 仅在片段不够时使用)\n  - 通过 [Source X] 引用来源并附上 URL",
+				"de": "- staan_search: KI-optimierte Websuche über die Staan-API (Qwant-Infrastruktur, europäische Datenhaltung)\n  - NUTZE DIESES TOOL für: Nachrichten, aktuelle Ereignisse, veränderliche Fakten, Fragen die präzise zitierbare Quellen erfordern\n  - Liefert Ergebnisse angereichert mit semantisch zur Anfrage bewerteten Inhalts-Chunks, neu geordnet nach Relevanz\n  - Wichtige Parameter: q (Anfrage, max. 400 Zeichen), market (fr-fr, en-us, de-de), offset (Paginierung: 0/10/20/30), extra_snippets (bewertete Chunks, standardmäßig aktiv), full_content (vollständiger Seiteninhalt als Markdown — nur wenn die Auszüge nicht ausreichen)\n  - Zitiere Quellen über ihre Kennung [Source X] und gib die URLs an"
+			}
+		}
+	],
+	"i18n": {
+		"supportedLocales": ["fr", "en", "es", "zh", "de"],
+		"defaultLocale": "fr"
+	}
+}
