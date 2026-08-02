@@ -296,6 +296,44 @@ export interface PluginPromptDeclaration {
 }
 
 /**
+ * Content-Security-Policy domains an MCP App template declares (SEP-1865 `_meta.ui.csp`).
+ * The host builds the iframe CSP from these; anything not declared is denied.
+ */
+export interface AppResourceCsp {
+	/** Origins the template may fetch/XHR/WebSocket to (`connect-src`). Default: none. */
+	connectDomains?: string[];
+	/** Origins for scripts, styles, images, fonts (`script/style/img/font-src`). Default: none. */
+	resourceDomains?: string[];
+	/** Origins the template may embed in nested frames (`frame-src`). Default: none. */
+	frameDomains?: string[];
+}
+
+/**
+ * An MCP App UI template (SEP-1865) exposed by a plugin: a static HTML document
+ * identified by a `ui://` URI, referenced by tools via `_meta.ui.resourceUri`.
+ * Served with mimeType `text/html;profile=mcp-app` and rendered by the host in a
+ * sandboxed iframe wired to the ext-apps postMessage bridge.
+ */
+export interface PluginAppResource {
+	/** Template URI; must start with `ui://` (convention: `ui://<pluginId>/<name>`). */
+	uri: string;
+	/** Human-readable template name (admin/debug display). */
+	title?: string;
+	/**
+	 * Returns the full static HTML document. Must NOT interpolate per-call data —
+	 * data reaches the view via the `ui/notifications/tool-result` bridge notification.
+	 */
+	getHtml: () => string;
+	meta?: {
+		csp?: AppResourceCsp;
+		/** Iframe permissions (spec `_meta.ui.permissions`), e.g. `{ clipboardWrite: {} }`. */
+		permissions?: Record<string, unknown>;
+		/** Hint that the host should draw a border around the view. */
+		prefersBorder?: boolean;
+	};
+}
+
+/**
  * Main plugin export interface
  */
 export interface PluginExport {
@@ -304,6 +342,11 @@ export interface PluginExport {
 	onLoad?: () => Promise<void>;
 	onUnload?: () => Promise<void>;
 	validateConfig?: (config: ToolConfigValues) => boolean | string;
+	/**
+	 * Optional: MCP App UI templates (SEP-1865) this plugin exposes. Registered at load
+	 * time in the app-resource registry and served via `/api/mcp-apps/resource`.
+	 */
+	appResources?: PluginAppResource[];
 	/**
 	 * Optional: Discover tools dynamically at runtime (e.g., from remote MCP servers).
 	 * Called at startup and when plugin config changes. `context.tokens` is provided
