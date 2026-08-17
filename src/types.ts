@@ -97,6 +97,8 @@ export interface PluginLogger {
 export interface PluginStorageAPI {
 	uploadFile: (fileName: string, buffer: Buffer, contentType: string) => Promise<string>;
 	getFileUrl: (fileName: string) => string;
+	/** Download a file's bytes (scoped to the plugin prefix, like uploadFile). */
+	downloadFile: (fileName: string) => Promise<{ buffer: Buffer; contentType: string }>;
 }
 
 /**
