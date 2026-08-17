@@ -95,6 +95,14 @@ function createMockStorage(pluginId: string): PluginStorageAPI {
 		},
 		getFileUrl: (fileName: string): string => {
 			return `/api/mock-files/mock-storage/${pluginId}/${fileName}`;
+		},
+		downloadFile: async (fileName: string): Promise<{ buffer: Buffer; contentType: string }> => {
+			const path = `mock-storage/${pluginId}/${fileName}`;
+			const file = files.get(path);
+			if (!file) {
+				throw new Error(`Mock file not found: ${path}`);
+			}
+			return file;
 		}
 	};
 }

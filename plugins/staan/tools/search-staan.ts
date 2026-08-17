@@ -176,7 +176,7 @@ export function createSearchStaanTool(context: PluginContext): AnyTool {
 		? `\n- full_content: récupère le corps complet des pages en Markdown (plus lent, plus de tokens). À réserver aux cas où les extraits ne suffisent pas.`
 		: '';
 
-	return tool<StaanSearchParams, StaanSearchResult>({
+	return tool<StaanSearchParams, StaanSearchResult, Record<string, unknown>>({
 		description: `Recherche web optimisée pour l'IA via l'API Staan (infrastructure Qwant, données européennes / RGPD). Retourne des résultats classés enrichis de chunks de contenu sémantiquement scorés par rapport à la requête — idéal pour du RAG et la citation de sources. Les résultats sont réordonnés par pertinence sémantique, pas par ranking SERP brut.${fullContentNote}`,
 		// Strip UI-only `sources` from the tool result sent back to the LLM.
 		// `sources` duplicate `results[]` content for citation display and would

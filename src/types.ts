@@ -97,6 +97,8 @@ export interface PluginLogger {
 export interface PluginStorageAPI {
 	uploadFile: (fileName: string, buffer: Buffer, contentType: string) => Promise<string>;
 	getFileUrl: (fileName: string) => string;
+	/** Download a file's bytes (scoped to the plugin prefix, like uploadFile). */
+	downloadFile: (fileName: string) => Promise<{ buffer: Buffer; contentType: string }>;
 }
 
 /**
@@ -114,11 +116,13 @@ export interface PluginTokenPayload {
 /**
  * Generic OAuth token storage scoped to (userId, pluginId).
  * `get()` auto-refreshes via `PluginExport.oauthHandlers.refresh` when needed.
+ * `providerKey` selects a per-provider token within the plugin (e.g. one per remote MCP
+ * server); omit for the plugin-wide default provider ('').
  */
 export interface PluginTokensAPI {
-	save: (tokens: PluginTokenPayload) => Promise<void>;
-	get: () => Promise<PluginTokenPayload | null>;
-	delete: () => Promise<void>;
+	save: (tokens: PluginTokenPayload, providerKey?: string) => Promise<void>;
+	get: (providerKey?: string) => Promise<PluginTokenPayload | null>;
+	delete: (providerKey?: string) => Promise<void>;
 }
 
 /**
@@ -171,6 +175,11 @@ export interface PluginToolDeclaration {
 	requiresSharepointAuth?: boolean;
 	/** Plugin-managed OAuth: value is the pluginId owning the OAuth flow. */
 	requiresPluginOAuth?: string;
+	/**
+	 * Per-provider OAuth key within the owning `requiresPluginOAuth` plugin (e.g. a remote_mcp
+	 * server id). Omitted/'' = the plugin-wide default provider.
+	 */
+	oauthProviderKey?: string;
 	systemPromptInstructions: string | { [locale: string]: string };
 }
 
@@ -219,17 +228,28 @@ export interface PluginToolDefinition {
  * OAuth handlers a plugin can declare to enable the generic per-user OAuth flow.
  */
 export interface PluginOAuthHandlers {
+	/**
+	 * Build the provider authorization URL. `providerKey` selects the per-provider config for
+	 * multi-provider plugins; `codeChallenge`/`codeChallengeMethod` carry the PKCE challenge
+	 * (RFC 7636 S256) when the host initiates a PKCE flow.
+	 */
 	buildAuthUrl: (params: {
 		redirectUri: string;
 		state: string;
 		config: ToolConfigValues;
 		env: Record<string, string | undefined>;
+		providerKey?: string;
+		codeChallenge?: string;
+		codeChallengeMethod?: 'S256';
 	}) => string | Promise<string>;
+	/** Exchange the authorization code for tokens. `codeVerifier` is the PKCE verifier. */
 	exchangeCode: (params: {
 		code: string;
 		redirectUri: string;
 		config: ToolConfigValues;
 		env: Record<string, string | undefined>;
+		providerKey?: string;
+		codeVerifier?: string;
 	}) => Promise<{
 		accessToken: string;
 		refreshToken?: string;
@@ -241,6 +261,7 @@ export interface PluginOAuthHandlers {
 		refreshToken: string;
 		config: ToolConfigValues;
 		env: Record<string, string | undefined>;
+		providerKey?: string;
 	}) => Promise<{
 		accessToken: string;
 		refreshToken?: string;
@@ -262,6 +283,59 @@ export interface DiscoveredToolSnapshot {
 }
 
 /**
+ * A prompt exposed by a plugin as an external "skill" (e.g. an MCP `prompts` entry
+ * from a remote server). Fully serializable — doubles as its own snapshot; the prompt
+ * CONTENT is always fetched live at invocation time via `getPromptContent`.
+ */
+export interface PluginPromptDeclaration {
+	/** Globally unique skill id, e.g. '<pluginId>:<serverId>:<promptName>' */
+	id: string;
+	/** Display name (title if provided by the source, else the prompt name) */
+	name: string;
+	description?: string;
+	/** Plugin-specific routing needed to fetch the content (e.g. `{ serverId, promptName }`) */
+	meta: JsonValue;
+}
+
+/**
+ * Content-Security-Policy domains an MCP App template declares (SEP-1865 `_meta.ui.csp`).
+ * The host builds the iframe CSP from these; anything not declared is denied.
+ */
+export interface AppResourceCsp {
+	/** Origins the template may fetch/XHR/WebSocket to (`connect-src`). Default: none. */
+	connectDomains?: string[];
+	/** Origins for scripts, styles, images, fonts (`script/style/img/font-src`). Default: none. */
+	resourceDomains?: string[];
+	/** Origins the template may embed in nested frames (`frame-src`). Default: none. */
+	frameDomains?: string[];
+}
+
+/**
+ * An MCP App UI template (SEP-1865) exposed by a plugin: a static HTML document
+ * identified by a `ui://` URI, referenced by tools via `_meta.ui.resourceUri`.
+ * Served with mimeType `text/html;profile=mcp-app` and rendered by the host in a
+ * sandboxed iframe wired to the ext-apps postMessage bridge.
+ */
+export interface PluginAppResource {
+	/** Template URI; must start with `ui://` (convention: `ui://<pluginId>/<name>`). */
+	uri: string;
+	/** Human-readable template name (admin/debug display). */
+	title?: string;
+	/**
+	 * Returns the full static HTML document. Must NOT interpolate per-call data —
+	 * data reaches the view via the `ui/notifications/tool-result` bridge notification.
+	 */
+	getHtml: () => string;
+	meta?: {
+		csp?: AppResourceCsp;
+		/** Iframe permissions (spec `_meta.ui.permissions`), e.g. `{ clipboardWrite: {} }`. */
+		permissions?: Record<string, unknown>;
+		/** Hint that the host should draw a border around the view. */
+		prefersBorder?: boolean;
+	};
+}
+
+/**
  * Main plugin export interface
  */
 export interface PluginExport {
@@ -270,6 +344,11 @@ export interface PluginExport {
 	onLoad?: () => Promise<void>;
 	onUnload?: () => Promise<void>;
 	validateConfig?: (config: ToolConfigValues) => boolean | string;
+	/**
+	 * Optional: MCP App UI templates (SEP-1865) this plugin exposes. Registered at load
+	 * time in the app-resource registry and served via `/api/mcp-apps/resource`.
+	 */
+	appResources?: PluginAppResource[];
 	/**
 	 * Optional: Discover tools dynamically at runtime (e.g., from remote MCP servers).
 	 * Called at startup and when plugin config changes. `context.tokens` is provided
@@ -296,6 +375,32 @@ export interface PluginExport {
 	) =>
 		| { tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }
 		| Promise<{ tools: PluginToolDefinition[]; declarations: PluginToolDeclaration[] }>;
+	/**
+	 * Optional: discover prompts exposed by the plugin's sources (e.g. MCP `prompts/list`).
+	 * Discovered prompts surface as external, read-only skills. Same trigger points and
+	 * user-token semantics as `discoverTools`.
+	 */
+	discoverPrompts?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		context?: { tokens?: PluginTokensAPI }
+	) => Promise<{ prompts: PluginPromptDeclaration[] }>;
+	/**
+	 * Optional: fetch the current content of a discovered prompt at invocation time
+	 * (e.g. MCP `prompts/get`). Should throw on failure — the caller degrades gracefully.
+	 */
+	getPromptContent?: (
+		config: ToolConfigValues,
+		env: Record<string, string | undefined>,
+		meta: JsonValue,
+		context?: { tokens?: PluginTokensAPI }
+	) => Promise<string>;
 	/** Optional: OAuth handlers for per-user authentication. */
 	oauthHandlers?: PluginOAuthHandlers;
+	/**
+	 * Optional: enumerate the plugin's OAuth providers for the current config. Multi-provider
+	 * plugins (e.g. remote_mcp: one provider per oauth server) return one entry per provider;
+	 * absent = a single default provider with key ''.
+	 */
+	listOAuthProviders?: (config: ToolConfigValues) => Array<{ key: string; label: string }>;
 }

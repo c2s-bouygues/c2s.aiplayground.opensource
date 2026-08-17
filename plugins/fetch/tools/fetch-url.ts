@@ -2,7 +2,7 @@ import { tool, jsonSchema } from 'ai';
 import type { PluginContext, AnyTool } from '../../../src/types';
 import TurndownService from 'turndown';
 import { Readability } from '@mozilla/readability';
-import { parseHTML } from 'linkedom';
+import { JSDOM } from 'jsdom';
 import { safeFetch, SsrfError } from '../lib/ssrf';
 
 interface FetchUrlParams {
@@ -31,28 +31,40 @@ function isHtmlContent(contentType: string, body: string): boolean {
 }
 
 function htmlToReadableMarkdown(html: string, url: string): string {
-	const { document } = parseHTML(html);
+	// jsdom, et non linkedom : les dependances runtime des plugins externes
+	// doivent exister dans le package.json de Chatbot.SvelteKit, car l'image
+	// Docker ne copie que `plugins/` de ce repo (jamais son node_modules).
+	// linkedom y a ete retire au profit de jsdom (DOMPurify), ce qui cassait
+	// le build de l'app des que ce plugin etait active.
+	// jsdom ne fetch aucune ressource externe et n'execute aucun script par
+	// defaut : on parse du HTML potentiellement hostile de facon inerte.
+	// `url` sert de base pour que Readability resolve les liens relatifs.
+	const dom = new JSDOM(html, { url });
 
-	// Use Readability to extract the main content
-	const reader = new Readability(document, { charThreshold: 0 });
-	const article = reader.parse();
+	try {
+		// Use Readability to extract the main content
+		const reader = new Readability(dom.window.document, { charThreshold: 0 });
+		const article = reader.parse();
 
-	const contentHtml = article?.content || html;
+		const contentHtml = article?.content || html;
 
-	const turndown = new TurndownService({
-		headingStyle: 'atx',
-		codeBlockStyle: 'fenced',
-		bulletListMarker: '-'
-	});
+		const turndown = new TurndownService({
+			headingStyle: 'atx',
+			codeBlockStyle: 'fenced',
+			bulletListMarker: '-'
+		});
 
-	let markdown = turndown.turndown(contentHtml);
+		let markdown = turndown.turndown(contentHtml);
 
-	// Prepend title if available
-	if (article?.title) {
-		markdown = `# ${article.title}\n\n${markdown}`;
+		// Prepend title if available
+		if (article?.title) {
+			markdown = `# ${article.title}\n\n${markdown}`;
+		}
+
+		return markdown;
+	} finally {
+		dom.window.close();
 	}
-
-	return markdown;
 }
 
 function applyPagination(
