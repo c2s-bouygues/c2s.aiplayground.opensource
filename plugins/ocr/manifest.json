@@ -6,7 +6,7 @@
 	"author": "AI Playground",
 	"license": "MIT",
 	"icon": "hugeicons:document-attachment",
-	"category": "documents",
+	"category": "productivity",
 	"requiredEnvVars": [],
 	"optionalEnvVars": ["OCR_ENDPOINT", "OCR_API_KEY"],
 	"configSchema": {
@@ -28,8 +28,10 @@
 	"tools": [
 		{
 			"id": "extract",
-			"name": "OCR — Extraction de texte",
-			"description": "Extrait le texte de PDF scannés et d'images de documents (OCR). À utiliser quand le document est un scan ou une photo sans couche texte sélectionnable — l'analyse native échoue sur ces fichiers.",
+			"name": "Extraction de texte",
+			"description": "Extrait le texte de PDF scannés et d'images de documents (OCR). À utiliser quand le document est un scan ou une photo sans couche texte sélectionnable.",
+			"consumesConversationFiles": true,
+			"smartToolsHint": "OCR EXCEPTION overriding the attachment native-analysis rule: select this tool when the user indicates the attachment is a SCAN or a PHOTO of a document, explicitly asks for OCR, or complains that the text is not readable/selectable/extractable — native extraction fails on image-only documents with no text layer. For ordinary digital documents ('summarize this PDF'), do NOT select it: the native-analysis rule applies.",
 			"systemPromptInstructions": {
 				"fr": "- ocr_extract: extrait le texte (OCR) d'un fichier attaché à la conversation (PDF scanné, image de document)\n  - Paramètre file_url: utilise EXACTEMENT une des URLs listées dans la note « fichiers disponibles pour l'extraction de texte (OCR) » du contexte, sans la modifier\n  - Le résultat s'affiche dans un panneau interactif ; le texte extrait est aussi retourné dans la réponse de l'outil pour que tu puisses répondre aux questions de l'utilisateur\n  - Utilise cet outil quand le document est un scan/une photo sans texte sélectionnable, ou quand l'utilisateur demande explicitement un OCR",
 				"en": "- ocr_extract: extracts text (OCR) from a file attached to the conversation (scanned PDF, document image)\n  - file_url parameter: use EXACTLY one of the URLs listed in the \"files available for text extraction (OCR)\" note in the context, unmodified\n  - The result opens in an interactive panel; the extracted text is also returned in the tool response so you can answer the user's questions\n  - Use this tool when the document is a scan/photo with no selectable text layer, or when the user explicitly asks for OCR",

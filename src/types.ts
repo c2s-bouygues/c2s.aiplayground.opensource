@@ -188,6 +188,16 @@ export interface PluginToolDeclaration {
 	 * server id). Omitted/'' = the plugin-wide default provider.
 	 */
 	oauthProviderKey?: string;
+	/**
+	 * Tool reads files the user attached to the conversation (as storage bytes).
+	 * The client uploads attachments at submit time when the tool is enabled and
+	 * the server injects their `/api/files/...` URLs into the system prompt. The
+	 * tool MUST accept a `file_url` input parameter and read the file through
+	 * `storage.downloadConversationFile`.
+	 */
+	consumesConversationFiles?: boolean;
+	/** Extra selection rule injected into the smart-tools prompt when this tool is eligible. */
+	smartToolsHint?: string;
 	systemPromptInstructions: string | { [locale: string]: string };
 }
 
