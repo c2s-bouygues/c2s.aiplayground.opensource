@@ -1,0 +1,46 @@
+{
+	"id": "ocr",
+	"name": "OCR",
+	"version": "0.1.0",
+	"description": "Extraction de texte (OCR) des fichiers attachés à la conversation (PDF scannés, images de documents) via un connecteur externe, avec visualisation du résultat dans un panneau interactif (MCP App)",
+	"author": "AI Playground",
+	"license": "MIT",
+	"icon": "hugeicons:document-attachment",
+	"category": "documents",
+	"requiredEnvVars": [],
+	"optionalEnvVars": ["OCR_ENDPOINT", "OCR_API_KEY"],
+	"configSchema": {
+		"type": "object",
+		"title": "OCR Configuration",
+		"properties": {
+			"endpoint": {
+				"type": "string",
+				"title": "Endpoint OCR",
+				"description": "URL du service OCR externe (ex: déploiement Mistral OCR sur Azure). Si vide, la variable d'environnement OCR_ENDPOINT est utilisée. Sans endpoint ni clé, l'outil fonctionne en mode démo (texte factice)."
+			},
+			"apiKey": {
+				"type": "string",
+				"title": "API Key",
+				"description": "Clé API du service OCR (Bearer token). Si vide, la variable d'environnement OCR_API_KEY est utilisée."
+			}
+		}
+	},
+	"tools": [
+		{
+			"id": "extract",
+			"name": "OCR — Extraction de texte",
+			"description": "Extrait le texte de PDF scannés et d'images de documents (OCR). À utiliser quand le document est un scan ou une photo sans couche texte sélectionnable — l'analyse native échoue sur ces fichiers.",
+			"systemPromptInstructions": {
+				"fr": "- ocr_extract: extrait le texte (OCR) d'un fichier attaché à la conversation (PDF scanné, image de document)\n  - Paramètre file_url: utilise EXACTEMENT une des URLs listées dans la note « fichiers disponibles pour l'extraction de texte (OCR) » du contexte, sans la modifier\n  - Le résultat s'affiche dans un panneau interactif ; le texte extrait est aussi retourné dans la réponse de l'outil pour que tu puisses répondre aux questions de l'utilisateur\n  - Utilise cet outil quand le document est un scan/une photo sans texte sélectionnable, ou quand l'utilisateur demande explicitement un OCR",
+				"en": "- ocr_extract: extracts text (OCR) from a file attached to the conversation (scanned PDF, document image)\n  - file_url parameter: use EXACTLY one of the URLs listed in the \"files available for text extraction (OCR)\" note in the context, unmodified\n  - The result opens in an interactive panel; the extracted text is also returned in the tool response so you can answer the user's questions\n  - Use this tool when the document is a scan/photo with no selectable text layer, or when the user explicitly asks for OCR",
+				"es": "- ocr_extract: extrae el texto (OCR) de un archivo adjunto a la conversación (PDF escaneado, imagen de documento)\n  - Parámetro file_url: usa EXACTAMENTE una de las URLs listadas en la nota de contexto sobre archivos disponibles para OCR, sin modificarla\n  - El resultado se muestra en un panel interactivo; el texto extraído también se devuelve en la respuesta de la herramienta\n  - Usa esta herramienta cuando el documento es un escaneo/foto sin capa de texto seleccionable, o cuando el usuario pide OCR explícitamente",
+				"zh": "- ocr_extract: 对会话附件（扫描 PDF、文档图片）进行文字识别 (OCR)\n  - file_url 参数: 必须完全使用上下文中 OCR 可用文件列表里的 URL，不得修改\n  - 结果会在交互面板中展示；提取的文本也会包含在工具返回中，便于回答用户问题\n  - 当文档是无可选文本层的扫描件/照片，或用户明确要求 OCR 时使用此工具",
+				"de": "- ocr_extract: extrahiert Text (OCR) aus einer an die Konversation angehängten Datei (gescanntes PDF, Dokumentbild)\n  - Parameter file_url: verwende EXAKT eine der im Kontext unter den für OCR verfügbaren Dateien gelisteten URLs, unverändert\n  - Das Ergebnis erscheint in einem interaktiven Panel; der extrahierte Text wird auch in der Tool-Antwort zurückgegeben\n  - Nutze dieses Tool, wenn das Dokument ein Scan/Foto ohne auswählbare Textebene ist oder der Nutzer explizit OCR verlangt"
+			}
+		}
+	],
+	"i18n": {
+		"supportedLocales": ["fr", "en", "es", "zh", "de"],
+		"defaultLocale": "fr"
+	}
+}

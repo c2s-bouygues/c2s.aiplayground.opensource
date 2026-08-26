@@ -13,6 +13,7 @@ import fetchPlugin from '../../../plugins/fetch';
 import bingPlugin from '../../../plugins/bing';
 import exaPlugin from '../../../plugins/exa';
 import staanPlugin from '../../../plugins/staan';
+import ocrPlugin from '../../../plugins/ocr';
 
 // Registry of loaded plugins
 const loadedPlugins: PluginExport[] = [
@@ -21,7 +22,8 @@ const loadedPlugins: PluginExport[] = [
 	fetchPlugin,
 	bingPlugin,
 	exaPlugin,
-	staanPlugin
+	staanPlugin,
+	ocrPlugin
 ];
 
 export interface PluginInfo {
@@ -103,6 +105,19 @@ function createMockStorage(pluginId: string): PluginStorageAPI {
 				throw new Error(`Mock file not found: ${path}`);
 			}
 			return file;
+		},
+		downloadConversationFile: async (
+			source: string
+		): Promise<{ buffer: Buffer; contentType: string; fileName: string }> => {
+			// Playground stand-in: no real conversation storage — return fake bytes
+			// so tools exercising the read path (e.g. ocr) work in local dev.
+			const fileName = source.split('/').pop() ?? source;
+			console.log(`[${pluginId}] Mock conversation file downloaded: ${source}`);
+			return {
+				buffer: Buffer.from(`mock conversation file content for ${fileName}`),
+				contentType: 'application/octet-stream',
+				fileName
+			};
 		}
 	};
 }

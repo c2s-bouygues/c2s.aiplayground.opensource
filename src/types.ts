@@ -99,6 +99,14 @@ export interface PluginStorageAPI {
 	getFileUrl: (fileName: string) => string;
 	/** Download a file's bytes (scoped to the plugin prefix, like uploadFile). */
 	downloadFile: (fileName: string) => Promise<{ buffer: Buffer; contentType: string }>;
+	/**
+	 * Download a file belonging to the CURRENT conversation (user upload, generated
+	 * file, smolagent file). Source: `/api/files/<key>` URL or raw storage key;
+	 * allowlisted prefixes only, scope must match the conversation — else throws.
+	 */
+	downloadConversationFile: (
+		source: string
+	) => Promise<{ buffer: Buffer; contentType: string; fileName: string }>;
 }
 
 /**
