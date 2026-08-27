@@ -14,8 +14,19 @@
  */
 
 import type { OcrPage, OcrPageImage } from './result-store';
+import { splitPdfIntoImageBatches } from './pdf-split';
 
 export const DEFAULT_OCR_MODEL = 'mistral-ocr-2503';
+
+/**
+ * Hard cap for batched OCR of documents exceeding the service's per-request
+ * page limit (Azure Mistral OCR: 30 pages/request): at most this many pages
+ * are processed, front to back.
+ */
+export const MAX_TOTAL_PAGES = 500;
+
+/** Fallback per-request page limit when the service error doesn't state one. */
+export const DEFAULT_PAGE_LIMIT = 30;
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
@@ -81,6 +92,55 @@ function normalizeImageDataUri(value: unknown): string | undefined {
 	if (value.startsWith('data:image/')) return value;
 	if (value.startsWith('data:')) return undefined; // non-image data URI — drop
 	return `data:image/jpeg;base64,${value}`;
+}
+
+/**
+ * Detects the service's "too many pages" rejection (Azure Mistral OCR error
+ * `document_parser_too_many_pages`, code 3730) and extracts the page counts
+ * from its message ("This document has N pages, … maximum allowed of M").
+ */
+export function parseTooManyPages(
+	errorText: string
+): { totalPages: number; maxPages: number } | null {
+	if (!/too_many_pages/i.test(errorText)) return null;
+	const match = errorText.match(/has (\d+) pages.*?maximum allowed of (\d+)/i);
+	if (!match) return { totalPages: 0, maxPages: DEFAULT_PAGE_LIMIT };
+	return { totalPages: parseInt(match[1], 10), maxPages: parseInt(match[2], 10) };
+}
+
+/**
+ * Batched OCR for documents exceeding the per-request page limit. The Azure
+ * parser rejects an oversized document even when the request narrows the work
+ * (`pages` parameter), so the PDF is REALLY split: pages are rasterized and
+ * reassembled into image-only sub-PDFs of `batchSize` pages (lib/pdf-split.ts,
+ * using the host's @hyzyla/pdfium + sharp), each OCR'd as its own document.
+ * Sequential on purpose (rate-limit friendly); one shared crop budget so the
+ * aggregate payload stays bounded. Page numbers are re-anchored to the
+ * original document (chunk pages are 1-based within their sub-PDF).
+ */
+export async function batchedMistralOcr(
+	connector: OcrConnector,
+	buffer: Buffer,
+	fileName: string,
+	batchSize: number,
+	options?: { cropBudget?: { remaining: number } }
+): Promise<{ pages: OcrPage[]; batches: number; totalPages: number; capped: boolean }> {
+	const split = await splitPdfIntoImageBatches(buffer, batchSize, MAX_TOTAL_PAGES);
+	const cropBudget = options?.cropBudget ?? { remaining: IMAGE_BASE64_BUDGET_CHARS };
+	const all: OcrPage[] = [];
+	for (const [j, batchPdf] of split.batches.entries()) {
+		const startPage = j * batchSize;
+		const chunk = await mistralOcr(connector, batchPdf, 'application/pdf', fileName, {
+			cropBudget
+		});
+		all.push(...chunk.map((p) => ({ ...p, page: startPage + p.page })));
+	}
+	return {
+		pages: all,
+		batches: split.batches.length,
+		totalPages: split.totalPages,
+		capped: split.capped
+	};
 }
 
 export async function mistralOcr(

@@ -34,8 +34,14 @@ import {
 	type LlmConfig,
 	type TemplateField
 } from '../lib/extraction';
-import { mistralOcr, resolveOcrConnector } from '../lib/mistral-ocr';
-import { buildMarkdown } from '../lib/result-store';
+import {
+	batchedMistralOcr,
+	mistralOcr,
+	parseTooManyPages,
+	resolveOcrConnector,
+	DEFAULT_PAGE_LIMIT
+} from '../lib/mistral-ocr';
+import { buildMarkdown, type OcrPage } from '../lib/result-store';
 
 const EXTRACTION_ICON = 'hugeicons:document-validation';
 const EXTRACTION_PREFERRED_WIDTH = 640;
@@ -355,13 +361,39 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 						result = await vlmPromise;
 					} else {
 						try {
-							const ocrPages = await mistralOcr(
-								connector,
-								file.buffer,
-								file.contentType,
-								file.fileName,
-								{ cropBudget: { remaining: 0 } }
-							);
+							let ocrPages: OcrPage[];
+							try {
+								ocrPages = await mistralOcr(
+									connector,
+									file.buffer,
+									file.contentType,
+									file.fileName,
+									{ cropBudget: { remaining: 0 } }
+								);
+							} catch (ocrError) {
+								// Same batching principle as ocr_extract: documents over the
+								// per-request page limit are split into image sub-PDFs. No
+								// extra user confirmation here — asking for compareWithOcr IS
+								// the consent for the heavier OCR pass.
+								const ocrErrorText =
+									ocrError instanceof Error ? ocrError.message : String(ocrError);
+								const tooMany = parseTooManyPages(ocrErrorText);
+								if (!tooMany) throw ocrError;
+								const batchSize = Math.max(1, tooMany.maxPages || DEFAULT_PAGE_LIMIT);
+								logger.info('compareWithOcr: batched OCR fallback', {
+									fileName: file.fileName,
+									totalPages: tooMany.totalPages,
+									batchSize
+								});
+								const batched = await batchedMistralOcr(
+									connector,
+									file.buffer,
+									file.fileName,
+									batchSize,
+									{ cropBudget: { remaining: 0 } }
+								);
+								ocrPages = batched.pages;
+							}
 							const ocrText = buildMarkdown(ocrPages);
 							const [vlmResult, ocrResult] = await Promise.all([
 								vlmPromise,

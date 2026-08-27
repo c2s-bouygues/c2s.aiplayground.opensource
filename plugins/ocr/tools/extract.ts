@@ -23,12 +23,13 @@ import {
 	type OcrPage,
 	type StoredOcrResult
 } from '../lib/result-store';
-import { splitPdfIntoImageBatches } from '../lib/pdf-split';
 import {
+	batchedMistralOcr,
 	mistralOcr,
+	parseTooManyPages,
 	resolveOcrConnector,
-	IMAGE_BASE64_BUDGET_CHARS,
-	type OcrConnector
+	DEFAULT_PAGE_LIMIT,
+	MAX_TOTAL_PAGES
 } from '../lib/mistral-ocr';
 
 const OCR_ICON = 'hugeicons:document-attachment';
@@ -141,16 +142,6 @@ const LONG_DOC_PREVIEW_CHARS = 1_500;
 /** Full pages/document ride inline in `data` only under this serialized size. */
 const INLINE_DATA_MAX_CHARS = 8_000;
 
-/**
- * Hard cap for batched OCR of documents exceeding the service's per-request
- * page limit (Azure Mistral OCR: 30 pages/request): at most this many pages
- * are processed, front to back.
- */
-const MAX_TOTAL_PAGES = 500;
-
-/** Fallback per-request page limit when the service error doesn't state one. */
-const DEFAULT_PAGE_LIMIT = 30;
-
 interface ExtractParams {
 	file_url: string;
 	language?: string;
@@ -190,52 +181,6 @@ function stubOcr(fileName: string, contentType: string, byteLength: number): Ocr
  * under the bounding boxes. Beyond it the tab falls back to the text preview.
  */
 const FILE_EMBED_MAX_BYTES = 5 * 1024 * 1024;
-
-/**
- * Detects the service's "too many pages" rejection (Azure Mistral OCR error
- * `document_parser_too_many_pages`, code 3730) and extracts the page counts
- * from its message ("This document has N pages, … maximum allowed of M").
- */
-function parseTooManyPages(errorText: string): { totalPages: number; maxPages: number } | null {
-	if (!/too_many_pages/i.test(errorText)) return null;
-	const match = errorText.match(/has (\d+) pages.*?maximum allowed of (\d+)/i);
-	if (!match) return { totalPages: 0, maxPages: DEFAULT_PAGE_LIMIT };
-	return { totalPages: parseInt(match[1], 10), maxPages: parseInt(match[2], 10) };
-}
-
-/**
- * Batched OCR for documents exceeding the per-request page limit. The Azure
- * parser rejects an oversized document even when the request narrows the work
- * (`pages` parameter), so the PDF is REALLY split: pages are rasterized and
- * reassembled into image-only sub-PDFs of `batchSize` pages (lib/pdf-split.ts,
- * using the host's @hyzyla/pdfium + sharp), each OCR'd as its own document.
- * Sequential on purpose (rate-limit friendly); one shared crop budget so the
- * aggregate payload stays bounded. Page numbers are re-anchored to the
- * original document (chunk pages are 1-based within their sub-PDF).
- */
-async function batchOcr(
-	connector: OcrConnector,
-	buffer: Buffer,
-	fileName: string,
-	batchSize: number
-): Promise<{ pages: OcrPage[]; batches: number; totalPages: number; capped: boolean }> {
-	const split = await splitPdfIntoImageBatches(buffer, batchSize, MAX_TOTAL_PAGES);
-	const cropBudget = { remaining: IMAGE_BASE64_BUDGET_CHARS };
-	const all: OcrPage[] = [];
-	for (const [j, batchPdf] of split.batches.entries()) {
-		const startPage = j * batchSize;
-		const chunk = await mistralOcr(connector, batchPdf, 'application/pdf', fileName, {
-			cropBudget
-		});
-		all.push(...chunk.map((p) => ({ ...p, page: startPage + p.page })));
-	}
-	return {
-		pages: all,
-		batches: split.batches.length,
-		totalPages: split.totalPages,
-		capped: split.capped
-	};
-}
 
 export function createExtractTool(context: PluginContext): AnyTool {
 	const { locale, logger, env } = context;
@@ -321,7 +266,12 @@ export function createExtractTool(context: PluginContext): AnyTool {
 						};
 					}
 					try {
-						const result = await batchOcr(connector, file.buffer, file.fileName, batchSize);
+						const result = await batchedMistralOcr(
+							connector,
+							file.buffer,
+							file.fileName,
+							batchSize
+						);
 						pages = result.pages;
 						batchInfo = {
 							batches: result.batches,
