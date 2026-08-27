@@ -36,7 +36,7 @@ const OCR_ICON = 'hugeicons:document-attachment';
 const OCR_PREFERRED_WIDTH = 560;
 
 /** The model needs the extracted text to answer questions, but keep it bounded. */
-const MAX_MESSAGE_TEXT_CHARS = 8_000;
+const MAX_CONTENT_TEXT_CHARS = 8_000;
 
 // --- Localized messages (external plugins are self-contained: no $lib imports) ---
 
@@ -70,6 +70,15 @@ const MSG_OCR_ERROR: Record<Locale, string> = {
 	es: 'Error del servicio OCR: {error}',
 	zh: 'OCR 服务错误：{error}',
 	de: 'Fehler des OCR-Dienstes: {error}'
+};
+
+/** Short user-facing line for the batch confirmation (the model-directed instructions go in `content`). */
+const MSG_CONFIRM_BATCH_USER: Record<Locale, string> = {
+	fr: 'Confirmation requise : {fileName} compte {totalPages} pages (limite : {maxPages} pages par requête OCR) — traitement possible en {batches} lot(s){cappedNote}.',
+	en: 'Confirmation required: {fileName} has {totalPages} pages (limit: {maxPages} pages per OCR request) — can be processed in {batches} batch(es){cappedNote}.',
+	es: 'Confirmación requerida: {fileName} tiene {totalPages} páginas (límite: {maxPages} páginas por petición OCR) — puede procesarse en {batches} lote(s){cappedNote}.',
+	zh: '需要确认：{fileName} 共 {totalPages} 页（OCR 每次请求上限 {maxPages} 页）— 可分 {batches} 批处理{cappedNote}。',
+	de: 'Bestätigung erforderlich: {fileName} hat {totalPages} Seiten (Limit: {maxPages} Seiten pro OCR-Anfrage) — Verarbeitung in {batches} Los(en) möglich{cappedNote}.'
 };
 
 const MSG_CONFIRM_BATCH: Record<Locale, string> = {
@@ -131,11 +140,11 @@ interface OcrPluginConfig {
 }
 
 /**
- * Above this size the extracted text is not inlined in the tool message: the
+ * Above this size the extracted text is not inlined in the tool `content`: the
  * model gets a preview + the markdown file reference, and works through
  * ocr_search_text / ocr_read_text. Everything in the returned object reaches
  * the LLM prompt (the host serializes the full output and replays it verbatim
- * on every later turn), so both `message` and `data` must stay bounded.
+ * on every later turn), so `content` and `data` must stay bounded.
  */
 const LONG_DOC_PREVIEW_CHARS = 1_500;
 
@@ -211,6 +220,7 @@ export function createExtractTool(context: PluginContext): AnyTool {
 		}),
 		execute: async (params): Promise<{
 			message: string;
+			content?: string;
 			data?: Record<string, unknown>;
 			_meta?: Record<string, unknown>;
 		}> => {
@@ -255,14 +265,16 @@ export function createExtractTool(context: PluginContext): AnyTool {
 							totalPages,
 							batchSize
 						});
+						const confirmParams = {
+							fileName: file.fileName,
+							totalPages,
+							maxPages: batchSize,
+							batches: plannedBatches,
+							cappedNote: totalPages > MAX_TOTAL_PAGES ? msg(MSG_CAPPED_NOTE, locale) : ''
+						};
 						return {
-							message: msg(MSG_CONFIRM_BATCH, locale, {
-								fileName: file.fileName,
-								totalPages,
-								maxPages: batchSize,
-								batches: plannedBatches,
-								cappedNote: totalPages > MAX_TOTAL_PAGES ? msg(MSG_CAPPED_NOTE, locale) : ''
-							})
+							message: msg(MSG_CONFIRM_BATCH_USER, locale, confirmParams),
+							content: msg(MSG_CONFIRM_BATCH, locale, confirmParams)
 						};
 					}
 					try {
@@ -338,7 +350,7 @@ export function createExtractTool(context: PluginContext): AnyTool {
 			const stubNotice = isStub ? `\n\n${msg(MSG_STUB_NOTICE, locale)}` : '';
 
 			let body: string;
-			if (fullText.length <= MAX_MESSAGE_TEXT_CHARS) {
+			if (fullText.length <= MAX_CONTENT_TEXT_CHARS) {
 				body = fullText;
 			} else if (stored) {
 				body = `${fullText.slice(0, LONG_DOC_PREVIEW_CHARS)}\n[…]\n\n${msg(MSG_LONG_DOC, locale, {
@@ -348,7 +360,7 @@ export function createExtractTool(context: PluginContext): AnyTool {
 					docId: stored.docId
 				})}`;
 			} else {
-				body = `${fullText.slice(0, MAX_MESSAGE_TEXT_CHARS)}\n[…texte tronqué]`;
+				body = `${fullText.slice(0, MAX_CONTENT_TEXT_CHARS)}\n[…texte tronqué]`;
 			}
 
 			logger.info('OCR extraction done', {
@@ -366,8 +378,12 @@ export function createExtractTool(context: PluginContext): AnyTool {
 			// otherwise the panel fetches the payload via ocr_get_result.
 			const inlinePayload = JSON.stringify(payload).length <= INLINE_DATA_MAX_CHARS;
 
+			// `message` is the ONLY field the host UI renders in the tool step — keep it
+			// to the short summary. The extracted text goes in `content`, which reaches
+			// the model via toModelOutput (and via the serialized replay on later turns).
 			return {
-				message: `${summary}${batchNote}${stubNotice}\n\n---\n${body}`,
+				message: `${summary}${batchNote}${stubNotice}`,
+				content: body,
 				data: {
 					...(stored ? { docId: stored.docId, markdownUrl: stored.markdownUrl } : {}),
 					fileName: file.fileName,
@@ -390,12 +406,15 @@ export function createExtractTool(context: PluginContext): AnyTool {
 				}
 			};
 		},
-		// The host serializes the FULL output (message + data) to the model by
-		// default — expose `message` only, `data`/`_meta` are panel plumbing.
+		// The host serializes the FULL output to the model by default — expose
+		// `message` + `content` only, `data`/`_meta` are panel plumbing.
 		// (Later-turn replays bypass this hook, hence `data` staying small above.)
-		toModelOutput: ({ output }) => ({
-			type: 'text' as const,
-			value: (output as { message: string }).message
-		})
+		toModelOutput: ({ output }) => {
+			const o = output as { message: string; content?: string };
+			return {
+				type: 'text' as const,
+				value: o.content ? `${o.message}\n\n---\n${o.content}` : o.message
+			};
+		}
 	});
 }

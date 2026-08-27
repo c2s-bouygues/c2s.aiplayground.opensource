@@ -47,7 +47,7 @@ const EXTRACTION_ICON = 'hugeicons:document-validation';
 const EXTRACTION_PREFERRED_WIDTH = 640;
 
 /** The model needs the extracted values to answer, but keep the payload bounded. */
-const MAX_MESSAGE_JSON_CHARS = 6_000;
+const MAX_CONTENT_JSON_CHARS = 6_000;
 
 /** Anthropic inline limits are ~5MB/image and 32MB/request — guard well below. */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -302,6 +302,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			params
 		): Promise<{
 			message: string;
+			content?: string;
 			data?: Record<string, unknown>;
 			_meta?: Record<string, unknown>;
 		}> => {
@@ -474,8 +475,8 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				2
 			);
 			const truncated =
-				resultJson.length > MAX_MESSAGE_JSON_CHARS
-					? `${resultJson.slice(0, MAX_MESSAGE_JSON_CHARS)}\n[…résultat tronqué]`
+				resultJson.length > MAX_CONTENT_JSON_CHARS
+					? `${resultJson.slice(0, MAX_CONTENT_JSON_CHARS)}\n[…résultat tronqué]`
 					: resultJson;
 
 			logger.info('Field extraction done', {
@@ -487,8 +488,12 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				provider
 			});
 
+			// `message` is the ONLY field the host UI renders in the tool step — keep it
+			// to the short summary. The result JSON goes in `content`, which reaches
+			// the model via toModelOutput (and via the serialized replay on later turns).
 			return {
-				message: `${summary}${compareSummary}${compareNotice}${stubNotice}\n\n---\n${truncated}`,
+				message: `${summary}${compareSummary}${compareNotice}${stubNotice}`,
+				content: truncated,
 				data: {
 					fileName: file.fileName,
 					contentType: file.contentType,
@@ -510,10 +515,13 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			};
 		},
 		// The host serializes the FULL output to the model by default — expose
-		// `message` only (it already carries the result JSON, bounded).
-		toModelOutput: ({ output }) => ({
-			type: 'text' as const,
-			value: (output as { message: string }).message
-		})
+		// `message` + `content` (the bounded result JSON) only.
+		toModelOutput: ({ output }) => {
+			const o = output as { message: string; content?: string };
+			return {
+				type: 'text' as const,
+				value: o.content ? `${o.message}\n\n---\n${o.content}` : o.message
+			};
+		}
 	});
 }
