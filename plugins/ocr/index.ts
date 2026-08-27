@@ -21,6 +21,9 @@ import type { PluginExport, PluginToolDefinition } from '../../src/types';
 import manifest from './manifest.json';
 import { createExtractTool } from './tools/extract';
 import { createExtractFieldsTool } from './tools/extract-fields';
+import { createReadTextTool } from './tools/read-text';
+import { createSearchTextTool } from './tools/search-text';
+import { createGetResultTool } from './tools/get-result';
 import { OCR_VIEWER_RESOURCE_URI, renderOcrViewerTemplate } from './template';
 import {
 	EXTRACTION_VIEWER_RESOURCE_URI,
@@ -39,6 +42,22 @@ const tools: PluginToolDefinition[] = [
 		id: 'extract_fields',
 		createTool: (ctx) => createExtractFieldsTool(ctx)
 		// Same rationale: config-or-env connector, stub mode without any.
+	},
+	{
+		// Long-document companions: extract stores the full markdown in the
+		// plugin's conversation storage; these read it back in bounded slices.
+		id: 'read_text',
+		createTool: (ctx) => createReadTextTool(ctx)
+	},
+	{
+		id: 'search_text',
+		createTool: (ctx) => createSearchTextTool(ctx)
+	},
+	{
+		// Panel data feed (bridge-only by convention): serves the full stored
+		// payload (pages, boxes, document) to the ui://ocr/viewer iframe.
+		id: 'get_result',
+		createTool: (ctx) => createGetResultTool(ctx)
 	}
 ];
 
@@ -50,9 +69,16 @@ const plugin: PluginExport = {
 		{
 			uri: OCR_VIEWER_RESOURCE_URI,
 			title: 'OCR result viewer',
-			getHtml: renderOcrViewerTemplate
-			// Self-contained widget: the host's default CSP is enough (inline
-			// script/style + host-origin SDK), no meta.csp declaration needed.
+			getHtml: renderOcrViewerTemplate,
+			// The layout tab renders the real PDF pages with pdf.js loaded from
+			// jsdelivr (script-src via resourceDomains); 'blob:' lets pdf.js spawn
+			// its worker (worker-src falls back to script-src). Everything else
+			// stays inline/host-origin.
+			meta: {
+				csp: {
+					resourceDomains: ['https://cdn.jsdelivr.net', 'blob:']
+				}
+			}
 		},
 		{
 			uri: EXTRACTION_VIEWER_RESOURCE_URI,

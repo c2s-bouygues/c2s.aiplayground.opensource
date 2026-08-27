@@ -358,6 +358,12 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					}
 				}
 			};
-		}
+		},
+		// The host serializes the FULL output to the model by default — expose
+		// `message` only (it already carries the result JSON, bounded).
+		toModelOutput: ({ output }) => ({
+			type: 'text' as const,
+			value: (output as { message: string }).message
+		})
 	});
 }
