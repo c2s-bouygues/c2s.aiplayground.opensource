@@ -90,6 +90,7 @@ li.warning { color: var(--warn); }
 		<span class="badge" id="status" hidden></span>
 		<span class="badge" id="confidence" hidden></span>
 		<span class="badge warn" id="mode" hidden>double extraction</span>
+		<span class="badge warn" id="compare" hidden>VLM vs OCR</span>
 		<span class="badge warn" id="provider" hidden>démo (stub)</span>
 		<div class="toolbar">
 			<button id="copycsv" hidden>Copier CSV</button>
@@ -170,6 +171,7 @@ function render(data) {
 	confidence.className = 'badge ' + confidenceClass(confValue);
 
 	document.getElementById('mode').hidden = data.doubleExtraction !== true;
+	document.getElementById('compare').hidden = !Array.isArray(data.comparison) || data.comparison.length === 0;
 	document.getElementById('provider').hidden = data.provider !== 'stub';
 
 	const body = document.getElementById('body');
@@ -219,6 +221,59 @@ function render(data) {
 	table.appendChild(tbody);
 	fieldsCard.appendChild(table);
 	body.appendChild(fieldsCard);
+
+	// --- VLM vs OCR comparison (MagicOCR-style cross-validation, two modalities) ---
+	const comparison = Array.isArray(data.comparison) ? data.comparison : [];
+	if (comparison.length > 0) {
+		const compCard = makeCard('Comparaison VLM vs OCR');
+		const compTable = document.createElement('table');
+		const compHead = document.createElement('thead');
+		const compHeadRow = document.createElement('tr');
+		for (const label of ['Champ', 'Vision (VLM)', 'Texte (OCR)', 'Statut']) {
+			const th = document.createElement('th');
+			th.textContent = label;
+			compHeadRow.appendChild(th);
+		}
+		compHead.appendChild(compHeadRow);
+		compTable.appendChild(compHead);
+		const compBody = document.createElement('tbody');
+		for (const entry of comparison) {
+			const tr = document.createElement('tr');
+			const tdName = document.createElement('td');
+			tdName.textContent = String(entry.name || '');
+			tr.appendChild(tdName);
+			for (const side of ['vlm', 'ocr']) {
+				const td = document.createElement('td');
+				const value = formatValue(side === 'vlm' ? entry.vlmValue : entry.ocrValue);
+				const conf = side === 'vlm' ? entry.vlmConfidence : entry.ocrConfidence;
+				if (value === null) {
+					td.textContent = 'non trouvé';
+					td.className = 'null';
+				} else {
+					td.textContent = value; // untrusted extracted value — textContent only
+					if (typeof conf === 'number') {
+						const chip = document.createElement('span');
+						chip.className = 'chip ' + confidenceClass(conf) ;
+						chip.style.marginLeft = '6px';
+						chip.textContent = Math.round(conf) + '%';
+						td.appendChild(chip);
+					}
+				}
+				tr.appendChild(td);
+			}
+			const tdStatus = document.createElement('td');
+			const statusChip = document.createElement('span');
+			const partial = entry.vlmValue == null || entry.ocrValue == null;
+			statusChip.className = 'chip ' + (entry.agree ? 'ok' : partial ? 'warn' : 'err');
+			statusChip.textContent = entry.agree ? 'concordant' : partial ? 'partiel' : 'divergent';
+			tdStatus.appendChild(statusChip);
+			tr.appendChild(tdStatus);
+			compBody.appendChild(tr);
+		}
+		compTable.appendChild(compBody);
+		compCard.appendChild(compTable);
+		body.appendChild(compCard);
+	}
 
 	// --- Coherence checks ---
 	const checks = Array.isArray(result.coherenceCheckResults) ? result.coherenceCheckResults : [];

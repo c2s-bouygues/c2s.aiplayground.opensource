@@ -45,6 +45,8 @@ export interface ExtractionResult {
 	errors: string[];
 	warnings: string[];
 	coherenceCheckResults: CoherenceCheckResult[];
+	/** true when the LLM call itself failed (transport/parse) — no data at all. */
+	failed?: boolean;
 }
 
 export interface LlmConfig {
@@ -87,11 +89,8 @@ export function buildDocumentBlock(buffer: Buffer, contentType: string): Documen
 	return null;
 }
 
-/** Prompt ported verbatim from MagicOcrV2 `buildExtractionPrompt`. */
-export function buildExtractionPrompt(
-	fields: TemplateField[],
-	coherenceChecks: CoherenceCheck[]
-): string {
+/** Shared tail of the extraction prompts (field list, rules, JSON contract). */
+function buildPromptTail(fields: TemplateField[], coherenceChecks: CoherenceCheck[]): string {
 	const fieldDescriptions = fields
 		.map((f) => {
 			let desc = `- "${f.name}" (type: ${f.type}${f.required ? ', obligatoire' : ', optionnel'})`;
@@ -105,9 +104,7 @@ export function buildExtractionPrompt(
 			? `\n\nRègles de cohérence à vérifier:\n${coherenceChecks.map((c) => `- ${c.name}: ${c.rule}`).join('\n')}`
 			: '';
 
-	return `Tu es un expert en extraction de données de documents. Analyse ce document et extrait les informations demandées.
-
-Champs à extraire:
+	return `Champs à extraire:
 ${fieldDescriptions}
 ${coherenceDesc}
 
@@ -139,6 +136,39 @@ Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
     }
   ]
 }`;
+}
+
+/** Prompt ported verbatim from MagicOcrV2 `buildExtractionPrompt` (vision input). */
+export function buildExtractionPrompt(
+	fields: TemplateField[],
+	coherenceChecks: CoherenceCheck[]
+): string {
+	return `Tu es un expert en extraction de données de documents. Analyse ce document et extrait les informations demandées.
+
+${buildPromptTail(fields, coherenceChecks)}`;
+}
+
+/** OCR-text budget for the text-based extraction prompt (~100k tokens). */
+const MAX_TEXT_PROMPT_CHARS = 400_000;
+
+/** Same contract as the vision prompt, but the input is the OCR'd text. */
+export function buildTextExtractionPrompt(
+	fields: TemplateField[],
+	coherenceChecks: CoherenceCheck[],
+	documentText: string
+): string {
+	const text =
+		documentText.length > MAX_TEXT_PROMPT_CHARS
+			? `${documentText.slice(0, MAX_TEXT_PROMPT_CHARS)}\n[…texte tronqué]`
+			: documentText;
+	return `Tu es un expert en extraction de données de documents. Analyse le TEXTE de document suivant (obtenu par OCR) et extrait les informations demandées.
+
+Texte du document:
+---
+${text}
+---
+
+${buildPromptTail(fields, coherenceChecks)}`;
 }
 
 function toNumber(value: unknown, fallback: number): number {
@@ -180,23 +210,46 @@ function normalizeResult(parsed: Record<string, unknown>): ExtractionResult {
 	};
 }
 
+/**
+ * Resolve the Messages route from the configured base URL:
+ * - a URL already ending in /messages is used as-is (full route configured);
+ * - a bare Azure AI Foundry base URL (https://<resource>.services.ai.azure.com)
+ *   gets the Anthropic-compatible route `/anthropic/v1/messages`;
+ * - anything else gets the Anthropic-native `/v1/messages`.
+ */
+export function buildMessagesUrl(baseUrl: string): string {
+	const trimmed = baseUrl.replace(/\/+$/, '');
+	if (/\/messages$/i.test(trimmed)) return trimmed;
+	try {
+		const url = new URL(trimmed);
+		if (
+			(url.pathname === '' || url.pathname === '/') &&
+			url.hostname.toLowerCase().endsWith('.services.ai.azure.com')
+		) {
+			return `${trimmed}/anthropic/v1/messages`;
+		}
+	} catch {
+		// not a parseable URL — let fetch surface the error
+	}
+	return `${trimmed}/v1/messages`;
+}
+
 /** One Messages API round-trip; throws on transport/parse failure. */
-async function callClaude(
-	llm: LlmConfig,
-	block: DocumentBlock,
-	prompt: string
-): Promise<ExtractionResult> {
-	const response = await fetch(`${llm.baseUrl.replace(/\/+$/, '')}/v1/messages`, {
+async function callClaude(llm: LlmConfig, content: unknown[]): Promise<ExtractionResult> {
+	const response = await fetch(buildMessagesUrl(llm.baseUrl), {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
+			// Anthropic expects x-api-key; Azure AI Foundry accepts api-key —
+			// sending both keeps one connector for both routes.
 			'x-api-key': llm.apiKey,
+			'api-key': llm.apiKey,
 			'anthropic-version': ANTHROPIC_VERSION
 		},
 		body: JSON.stringify({
 			model: llm.model,
 			max_tokens: MAX_TOKENS,
-			messages: [{ role: 'user', content: [block, { type: 'text', text: prompt }] }]
+			messages: [{ role: 'user', content }]
 		}),
 		signal: AbortSignal.timeout(LLM_TIMEOUT_MS)
 	});
@@ -231,23 +284,60 @@ export async function extractFromDocument(
 	coherenceChecks: CoherenceCheck[]
 ): Promise<ExtractionResult> {
 	try {
-		const result = await callClaude(llm, block, buildExtractionPrompt(fields, coherenceChecks));
-		for (const field of fields) {
-			if (field.required && (result.fields[field.name] === null || result.fields[field.name] === undefined)) {
-				result.errors.push(`Champ obligatoire manquant: ${field.name}`);
-			}
-		}
+		const result = await callClaude(llm, [
+			block,
+			{ type: 'text', text: buildExtractionPrompt(fields, coherenceChecks) }
+		]);
+		validateRequired(result, fields);
 		return result;
 	} catch (error) {
-		return {
-			fields: {},
-			confidence: 0,
-			fieldConfidences: {},
-			errors: [`Erreur d'extraction: ${error instanceof Error ? error.message : String(error)}`],
-			warnings: [],
-			coherenceCheckResults: []
-		};
+		return degradedResult(error);
 	}
+}
+
+/**
+ * Text-based extraction: same field contract, but the model reads the OCR'd
+ * text instead of the document image. Used by the VLM-vs-OCR comparison mode.
+ * Never throws — failures degrade like extractFromDocument.
+ */
+export async function extractFromText(
+	llm: LlmConfig,
+	documentText: string,
+	fields: TemplateField[],
+	coherenceChecks: CoherenceCheck[]
+): Promise<ExtractionResult> {
+	try {
+		const result = await callClaude(llm, [
+			{ type: 'text', text: buildTextExtractionPrompt(fields, coherenceChecks, documentText) }
+		]);
+		validateRequired(result, fields);
+		return result;
+	} catch (error) {
+		return degradedResult(error);
+	}
+}
+
+function validateRequired(result: ExtractionResult, fields: TemplateField[]): void {
+	for (const field of fields) {
+		if (
+			field.required &&
+			(result.fields[field.name] === null || result.fields[field.name] === undefined)
+		) {
+			result.errors.push(`Champ obligatoire manquant: ${field.name}`);
+		}
+	}
+}
+
+function degradedResult(error: unknown): ExtractionResult {
+	return {
+		fields: {},
+		confidence: 0,
+		fieldConfidences: {},
+		errors: [`Erreur d'extraction: ${error instanceof Error ? error.message : String(error)}`],
+		warnings: [],
+		coherenceCheckResults: [],
+		failed: true
+	};
 }
 
 /**
@@ -271,7 +361,8 @@ export async function extractWithDoubleValidation(
 		fieldConfidences: {},
 		errors: [...r1.errors, ...r2.errors],
 		warnings: [...r1.warnings, ...r2.warnings],
-		coherenceCheckResults: []
+		coherenceCheckResults: [],
+		...(r1.failed && r2.failed ? { failed: true } : {})
 	};
 
 	for (const field of fields) {
@@ -326,6 +417,96 @@ export async function extractWithDoubleValidation(
 	merged.coherenceCheckResults = [...byName.values()];
 
 	return merged;
+}
+
+/** Per-field detail of the VLM-vs-OCR comparison, rendered by the MCP App. */
+export interface FieldComparison {
+	name: string;
+	vlmValue: unknown;
+	ocrValue: unknown;
+	vlmConfidence: number;
+	ocrConfidence: number;
+	/** true when both approaches produced the same value. */
+	agree: boolean;
+}
+
+/**
+ * Cross-modality validation (MagicOCR's double-extraction merge, applied to
+ * two DIFFERENT approaches): the vision extraction (VLM reads the document
+ * image) versus the text extraction (LLM reads the Mistral OCR markdown).
+ * Same merge rules — agreement keeps the value at max confidence, a value
+ * found by one side only is kept at ×0.8, a divergence keeps the most
+ * confident value at ×0.6 with a warning — plus a per-field comparison table
+ * for the panel. Coherence results are merged by name.
+ */
+export function compareExtractions(
+	vlm: ExtractionResult,
+	ocr: ExtractionResult,
+	fields: TemplateField[]
+): { result: ExtractionResult; comparison: FieldComparison[] } {
+	const merged: ExtractionResult = {
+		fields: {},
+		confidence: 0,
+		fieldConfidences: {},
+		errors: [...vlm.errors, ...ocr.errors],
+		warnings: [...vlm.warnings, ...ocr.warnings],
+		coherenceCheckResults: []
+	};
+	const comparison: FieldComparison[] = [];
+
+	for (const field of fields) {
+		const name = field.name;
+		const v = vlm.fields[name] ?? null;
+		const o = ocr.fields[name] ?? null;
+		const cv = vlm.fieldConfidences[name] ?? 0;
+		const co = ocr.fieldConfidences[name] ?? 0;
+		const agree = JSON.stringify(v) === JSON.stringify(o);
+		comparison.push({ name, vlmValue: v, ocrValue: o, vlmConfidence: cv, ocrConfidence: co, agree });
+
+		if (agree) {
+			merged.fields[name] = v;
+			merged.fieldConfidences[name] = Math.max(cv, co);
+		} else if (v === null) {
+			merged.fields[name] = o;
+			merged.fieldConfidences[name] = co * 0.8;
+			merged.warnings.push(`Champ "${name}": trouvé uniquement par l'extraction texte (OCR)`);
+		} else if (o === null) {
+			merged.fields[name] = v;
+			merged.fieldConfidences[name] = cv * 0.8;
+			merged.warnings.push(`Champ "${name}": trouvé uniquement par l'extraction vision (VLM)`);
+		} else {
+			const useVlm = cv >= co;
+			merged.fields[name] = useVlm ? v : o;
+			merged.fieldConfidences[name] = (useVlm ? cv : co) * 0.6;
+			merged.warnings.push(
+				`Champ "${name}": divergence VLM/OCR (${JSON.stringify(v)} vs ${JSON.stringify(o)})`
+			);
+		}
+	}
+
+	const confidences = Object.values(merged.fieldConfidences);
+	merged.confidence =
+		confidences.length > 0
+			? Math.round(confidences.reduce((sum, c) => sum + c, 0) / confidences.length)
+			: 0;
+
+	const byName = new Map<string, CoherenceCheckResult>();
+	for (const check of vlm.coherenceCheckResults) byName.set(check.name, { ...check });
+	for (const check of ocr.coherenceCheckResults) {
+		const existing = byName.get(check.name);
+		if (!existing) {
+			byName.set(check.name, { ...check });
+		} else if (existing.passed !== check.passed) {
+			byName.set(check.name, {
+				name: check.name,
+				passed: false,
+				message: `Divergence: ${existing.message} / ${check.message}`
+			});
+		}
+	}
+	merged.coherenceCheckResults = [...byName.values()];
+
+	return { result: merged, comparison };
 }
 
 /**

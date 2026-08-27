@@ -23,14 +23,19 @@ import type { PluginContext, AnyTool, Locale } from '../../../src/types';
 import { EXTRACTION_VIEWER_RESOURCE_URI } from '../template-extraction';
 import {
 	buildDocumentBlock,
+	compareExtractions,
 	extractFromDocument,
+	extractFromText,
 	extractWithDoubleValidation,
 	stubExtraction,
 	type CoherenceCheck,
 	type ExtractionResult,
+	type FieldComparison,
 	type LlmConfig,
 	type TemplateField
 } from '../lib/extraction';
+import { mistralOcr, resolveOcrConnector } from '../lib/mistral-ocr';
+import { buildMarkdown } from '../lib/result-store';
 
 const EXTRACTION_ICON = 'hugeicons:document-validation';
 const EXTRACTION_PREFERRED_WIDTH = 640;
@@ -86,6 +91,38 @@ const MSG_FILE_TOO_LARGE: Record<Locale, string> = {
 	de: 'Fehler: Datei zu groß ({size} MB, maximal 25 MB).'
 };
 
+const MSG_COMPARE_DONE: Record<Locale, string> = {
+	fr: 'Comparaison VLM vs OCR : {agree} champ(s) concordant(s), {disagree} divergent(s). Le détail est affiché dans le panneau.',
+	en: 'VLM vs OCR comparison: {agree} field(s) agree, {disagree} diverge. Details are shown in the panel.',
+	es: 'Comparación VLM vs OCR: {agree} campo(s) concordante(s), {disagree} divergente(s). El detalle se muestra en el panel.',
+	zh: 'VLM 与 OCR 对比：{agree} 个字段一致，{disagree} 个存在分歧。详情显示在面板中。',
+	de: 'VLM-vs-OCR-Vergleich: {agree} Feld(er) stimmen überein, {disagree} weichen ab. Details werden im Panel angezeigt.'
+};
+
+const MSG_COMPARE_UNAVAILABLE: Record<Locale, string> = {
+	fr: "Comparaison VLM/OCR indisponible : le connecteur OCR n'est pas configuré (endpoint/apiKey) — extraction vision seule.",
+	en: 'VLM/OCR comparison unavailable: the OCR connector is not configured (endpoint/apiKey) — vision-only extraction.',
+	es: 'Comparación VLM/OCR no disponible: el conector OCR no está configurado (endpoint/apiKey) — extracción solo por visión.',
+	zh: 'VLM/OCR 对比不可用：OCR 连接器未配置（endpoint/apiKey）— 仅使用视觉提取。',
+	de: 'VLM/OCR-Vergleich nicht verfügbar: Der OCR-Konnektor ist nicht konfiguriert (endpoint/apiKey) — nur Vision-Extraktion.'
+};
+
+const MSG_LLM_ERROR: Record<Locale, string> = {
+	fr: "Erreur du connecteur LLM d'extraction : {error}. Vérifie la configuration du plugin OCR (llmEndpoint/llmApiKey/llmModel) — pour Azure AI Foundry, l'URL de base https://<ressource>.services.ai.azure.com suffit (la route /anthropic/v1/messages est ajoutée automatiquement).",
+	en: 'Extraction LLM connector error: {error}. Check the OCR plugin configuration (llmEndpoint/llmApiKey/llmModel) — for Azure AI Foundry the base URL https://<resource>.services.ai.azure.com is enough (the /anthropic/v1/messages route is added automatically).',
+	es: 'Error del conector LLM de extracción: {error}. Verifica la configuración del plugin OCR (llmEndpoint/llmApiKey/llmModel) — para Azure AI Foundry basta la URL base https://<recurso>.services.ai.azure.com (la ruta /anthropic/v1/messages se añade automáticamente).',
+	zh: '提取 LLM 连接器错误：{error}。请检查 OCR 插件配置（llmEndpoint/llmApiKey/llmModel）— 对于 Azure AI Foundry，基础 URL https://<资源>.services.ai.azure.com 即可（/anthropic/v1/messages 路由会自动添加）。',
+	de: 'Fehler des Extraktions-LLM-Konnektors: {error}. Prüfe die Konfiguration des OCR-Plugins (llmEndpoint/llmApiKey/llmModel) — für Azure AI Foundry genügt die Basis-URL https://<Ressource>.services.ai.azure.com (die Route /anthropic/v1/messages wird automatisch ergänzt).'
+};
+
+const MSG_COMPARE_FAILED: Record<Locale, string> = {
+	fr: 'Comparaison VLM/OCR impossible ({error}) — extraction vision seule.',
+	en: 'VLM/OCR comparison failed ({error}) — vision-only extraction.',
+	es: 'Comparación VLM/OCR fallida ({error}) — extracción solo por visión.',
+	zh: 'VLM/OCR 对比失败（{error}）— 仅使用视觉提取。',
+	de: 'VLM/OCR-Vergleich fehlgeschlagen ({error}) — nur Vision-Extraktion.'
+};
+
 const MSG_NO_FIELDS: Record<Locale, string> = {
 	fr: 'Erreur: aucun champ à extraire fourni. Renseigne le paramètre fields avec au moins un champ (name + type).',
 	en: 'Error: no fields to extract were provided. Fill the fields parameter with at least one field (name + type).',
@@ -110,6 +147,10 @@ interface OcrPluginConfig {
 	llmEndpoint?: string;
 	llmApiKey?: string;
 	llmModel?: string;
+	/** OCR connector keys — used by the VLM-vs-OCR comparison mode. */
+	endpoint?: string;
+	apiKey?: string;
+	ocrModel?: string;
 }
 
 interface ExtractFieldsParams {
@@ -122,6 +163,7 @@ interface ExtractFieldsParams {
 	}>;
 	coherenceChecks?: Array<{ name: string; rule: string }>;
 	doubleExtraction?: boolean;
+	compareWithOcr?: boolean;
 }
 
 /**
@@ -193,7 +235,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 
 	return tool({
 		description:
-			"Extrait des champs structurés (valeurs typées) d'un document attaché à la conversation (PDF ou image : facture, formulaire, reçu, bon de livraison…). Définis les champs à extraire d'après la demande de l'utilisateur ; le résultat inclut valeurs, confiances 0-100, erreurs et contrôles de cohérence.",
+			"Extrait des champs structurés (valeurs typées) d'un document attaché à la conversation (PDF ou image : facture, formulaire, reçu, bon de livraison…). Définis les champs à extraire d'après la demande de l'utilisateur ; le résultat inclut valeurs, confiances 0-100, erreurs et contrôles de cohérence. Options de fiabilisation : doubleExtraction (deux passes vision croisées) et compareWithOcr (validation croisée vision vs texte Mistral OCR, comparée champ par champ dans le panneau).",
 		inputSchema: jsonSchema<ExtractFieldsParams>({
 			type: 'object',
 			properties: {
@@ -240,7 +282,12 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				doubleExtraction: {
 					type: 'boolean',
 					description:
-						'true pour lancer deux extractions indépendantes et les croiser champ par champ (plus fiable, plus lent) — optionnel'
+						'true pour lancer deux extractions vision indépendantes et les croiser champ par champ (plus fiable, plus lent) — optionnel'
+				},
+				compareWithOcr: {
+					type: 'boolean',
+					description:
+						"true pour valider l'extraction en croisant deux approches différentes : extraction vision (VLM sur l'image) contre extraction depuis le texte Mistral OCR — comparaison champ par champ affichée dans le panneau (nécessite le connecteur OCR configuré) — optionnel"
 				}
 			},
 			required: ['file_url', 'fields']
@@ -286,14 +333,74 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			const llm = resolveLlmConfig(config, env);
 			const isStub = llm === null;
 			const provider = isStub ? 'stub' : llm.model;
+			const compareWithOcr = params.compareWithOcr === true;
 
 			let result: ExtractionResult;
-			if (isStub) {
+			let comparison: FieldComparison[] | null = null;
+			let compareNotice = '';
+			if (llm === null) {
 				result = stubExtraction(fields, coherenceChecks);
-			} else if (doubleExtraction) {
-				result = await extractWithDoubleValidation(llm, block, fields, coherenceChecks);
 			} else {
-				result = await extractFromDocument(llm, block, fields, coherenceChecks);
+				const vlmPromise = doubleExtraction
+					? extractWithDoubleValidation(llm, block, fields, coherenceChecks)
+					: extractFromDocument(llm, block, fields, coherenceChecks);
+				if (!compareWithOcr) {
+					result = await vlmPromise;
+				} else {
+					// Cross-modality validation: vision extraction vs text extraction
+					// over the Mistral OCR markdown (crops skipped — text only).
+					const connector = resolveOcrConnector(config, env);
+					if (!connector) {
+						compareNotice = `\n${msg(MSG_COMPARE_UNAVAILABLE, locale)}`;
+						result = await vlmPromise;
+					} else {
+						try {
+							const ocrPages = await mistralOcr(
+								connector,
+								file.buffer,
+								file.contentType,
+								file.fileName,
+								{ cropBudget: { remaining: 0 } }
+							);
+							const ocrText = buildMarkdown(ocrPages);
+							const [vlmResult, ocrResult] = await Promise.all([
+								vlmPromise,
+								extractFromText(llm, ocrText, fields, coherenceChecks)
+							]);
+							// A technically failed extraction has no data: comparing it would
+							// fabricate "agreements" between empty results — degrade instead.
+							if (vlmResult.failed || ocrResult.failed) {
+								const failedSide = vlmResult.failed ? vlmResult : ocrResult;
+								compareNotice = `\n${msg(MSG_COMPARE_FAILED, locale, {
+									error: failedSide.errors[0] ?? 'échec du connecteur'
+								})}`;
+								result = vlmResult.failed ? ocrResult : vlmResult;
+							} else {
+								const compared = compareExtractions(vlmResult, ocrResult, fields);
+								result = compared.result;
+								comparison = compared.comparison;
+							}
+						} catch (error) {
+							compareNotice = `\n${msg(MSG_COMPARE_FAILED, locale, {
+								error: error instanceof Error ? error.message : String(error)
+							})}`;
+							result = await vlmPromise;
+						}
+					}
+				}
+			}
+
+			// LLM connector down (transport/parse failure on every attempt): no data
+			// at all — report the error plainly instead of a 0%-confidence table.
+			if (result.failed) {
+				logger.error('Field extraction LLM connector failed', {
+					error: result.errors.join(' | ')
+				});
+				return {
+					message: msg(MSG_LLM_ERROR, locale, {
+						error: result.errors[0] ?? 'erreur inconnue'
+					})
+				};
 			}
 
 			// MagicOCR status rule: error as soon as one error or one failed check.
@@ -302,13 +409,23 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					? 'error'
 					: 'success';
 
+			const modeParts = [
+				doubleExtraction ? 'double extraction' : 'simple',
+				...(comparison ? ['comparaison VLM/OCR'] : [])
+			];
 			const summary = msg(MSG_DONE, locale, {
 				count: fields.length,
 				fileName: file.fileName,
 				confidence: result.confidence,
-				mode: doubleExtraction ? 'double extraction' : 'simple',
+				mode: modeParts.join(' + '),
 				provider
 			});
+			const compareSummary = comparison
+				? `\n${msg(MSG_COMPARE_DONE, locale, {
+						agree: comparison.filter((c) => c.agree).length,
+						disagree: comparison.filter((c) => !c.agree).length
+					})}`
+				: '';
 			const stubNotice = isStub ? `\n\n${msg(MSG_STUB_NOTICE, locale)}` : '';
 
 			const resultJson = JSON.stringify(
@@ -339,7 +456,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			});
 
 			return {
-				message: `${summary}${stubNotice}\n\n---\n${truncated}`,
+				message: `${summary}${compareSummary}${compareNotice}${stubNotice}\n\n---\n${truncated}`,
 				data: {
 					fileName: file.fileName,
 					contentType: file.contentType,
@@ -347,7 +464,8 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					doubleExtraction,
 					status,
 					templateFields: fields,
-					result
+					result,
+					...(comparison ? { comparison } : {})
 				},
 				_meta: {
 					ui: {
