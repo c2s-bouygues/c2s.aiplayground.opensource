@@ -5,9 +5,10 @@
  * `storage.downloadConversationFile`, access-controlled by the core) and runs
  * it through an external OCR connector. When no endpoint/apiKey is configured
  * (plugin config or OCR_ENDPOINT / OCR_API_KEY env vars), the tool runs in
- * STUB mode and returns placeholder text — the plugin is a demo; the real
- * branch is a thin function meant to be swapped for the actual Mistral-OCR-on-
- * Azure contract later.
+ * STUB mode and returns placeholder text. The real branch implements the
+ * Mistral Document AI (OCR) contract — Azure AI Foundry
+ * (`/providers/mistral/azure/ocr`) or api.mistral.ai (`/v1/ocr`); a bare base
+ * URL like https://<resource>.services.ai.azure.com is completed automatically.
  *
  * The result carries `_meta.ui` (SEP-1865) so the host opens the `ui://ocr/viewer`
  * MCP App and delivers `data` as `structuredContent` to the iframe.
@@ -74,6 +75,7 @@ function msg(
 interface OcrPluginConfig {
 	endpoint?: string;
 	apiKey?: string;
+	ocrModel?: string;
 }
 
 interface OcrPage {
@@ -104,46 +106,93 @@ function stubOcr(fileName: string, contentType: string, byteLength: number): Ocr
 	];
 }
 
+const DEFAULT_OCR_MODEL = 'mistral-ocr-2503';
+
 /**
- * Real connector: thin POST wrapper, meant to be replaced with the actual
- * Mistral-OCR-on-Azure contract. Sends the file as base64 with a Bearer key
- * and expects `{ pages: [{ page, text }] }` back.
+ * Resolve the OCR route from the configured endpoint:
+ * - a URL already ending in /ocr is used as-is (full route configured);
+ * - a bare Azure AI Foundry base URL (https://<resource>.services.ai.azure.com)
+ *   gets the Mistral Document AI route `/providers/mistral/azure/ocr`;
+ * - any other bare base URL gets the Mistral-native route `/v1/ocr`;
+ * - a URL with another path is used as-is (custom proxy).
+ */
+function buildOcrUrl(endpoint: string): string {
+	const trimmed = endpoint.replace(/\/+$/, '');
+	if (/\/ocr$/i.test(trimmed)) return trimmed;
+	try {
+		const url = new URL(trimmed);
+		if (url.pathname === '' || url.pathname === '/') {
+			return url.hostname.toLowerCase().endsWith('.services.ai.azure.com')
+				? `${trimmed}/providers/mistral/azure/ocr`
+				: `${trimmed}/v1/ocr`;
+		}
+	} catch {
+		// not a parseable URL — let fetch surface the error
+	}
+	return trimmed;
+}
+
+/**
+ * Real connector: Mistral Document AI (OCR) contract, as served by Azure AI
+ * Foundry (`/providers/mistral/azure/ocr`) and by api.mistral.ai (`/v1/ocr`).
+ * The file travels as a base64 data-URL (`document_url` for PDFs/documents,
+ * `image_url` for images); the response is `{ pages: [{ index, markdown }] }`.
+ * Both `Authorization: Bearer` and `api-key` headers are sent — Azure accepts
+ * either depending on the resource configuration. Note: this API has no
+ * language parameter (the tool's `language` input is accepted but unused).
  */
 async function remoteOcr(
 	endpoint: string,
 	apiKey: string,
+	model: string,
 	buffer: Buffer,
 	contentType: string,
-	fileName: string,
-	language: string | undefined
+	fileName: string
 ): Promise<OcrPage[]> {
-	const response = await fetch(endpoint, {
+	const mediaType =
+		(contentType || '').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
+	const dataUrl = `data:${mediaType};base64,${buffer.toString('base64')}`;
+	const document = mediaType.startsWith('image/')
+		? { type: 'image_url', image_url: dataUrl }
+		: { type: 'document_url', document_url: dataUrl, document_name: fileName };
+
+	const response = await fetch(buildOcrUrl(endpoint), {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			Authorization: `Bearer ${apiKey}`
+			Authorization: `Bearer ${apiKey}`,
+			'api-key': apiKey
 		},
-		body: JSON.stringify({
-			file: buffer.toString('base64'),
-			contentType,
-			fileName,
-			...(language ? { language } : {})
-		}),
+		body: JSON.stringify({ model, document, include_image_base64: false }),
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 	});
+
+	const raw = await response.text().catch(() => '');
 	if (!response.ok) {
-		throw new Error(`${response.status} ${response.statusText}`);
+		throw new Error(
+			`${response.status} ${response.statusText}${raw ? ` — ${raw.slice(0, 300)}` : ''}`
+		);
 	}
-	const data = (await response.json()) as { pages?: unknown };
+	let data: { pages?: unknown };
+	try {
+		data = JSON.parse(raw) as { pages?: unknown };
+	} catch {
+		throw new Error(
+			`réponse non-JSON du service OCR (HTTP ${response.status}): ${raw.slice(0, 200) || '(corps vide)'}`
+		);
+	}
 	if (!Array.isArray(data.pages)) {
 		throw new Error('unexpected response shape (missing pages[])');
 	}
 	return data.pages
-		.filter(
-			(p): p is OcrPage =>
-				typeof p === 'object' && p !== null && typeof (p as OcrPage).text === 'string'
-		)
-		.map((p, i) => ({ page: typeof p.page === 'number' ? p.page : i + 1, text: p.text }));
+		.filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null)
+		.map((p, i) => ({
+			// Mistral pages are 0-based `index` with `markdown` content; tolerate
+			// the { page, text } shape for custom proxies.
+			page:
+				typeof p.index === 'number' ? p.index + 1 : typeof p.page === 'number' ? p.page : i + 1,
+			text: typeof p.markdown === 'string' ? p.markdown : typeof p.text === 'string' ? p.text : ''
+		}));
 }
 
 export function createExtractTool(context: PluginContext): AnyTool {
@@ -193,14 +242,15 @@ export function createExtractTool(context: PluginContext): AnyTool {
 			if (isStub) {
 				pages = stubOcr(file.fileName, file.contentType, file.buffer.length);
 			} else {
+				const model = config.ocrModel?.trim() || env.OCR_MODEL || DEFAULT_OCR_MODEL;
 				try {
 					pages = await remoteOcr(
 						endpoint,
 						apiKey,
+						model,
 						file.buffer,
 						file.contentType,
-						file.fileName,
-						params.language
+						file.fileName
 					);
 				} catch (error) {
 					const text = error instanceof Error ? error.message : String(error);

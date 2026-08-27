@@ -2,13 +2,21 @@
 	"id": "ocr",
 	"name": "OCR",
 	"version": "0.1.0",
-	"description": "Extraction de texte (OCR) des fichiers attachés à la conversation (PDF scannés, images de documents) via un connecteur externe, avec visualisation du résultat dans un panneau interactif (MCP App)",
+	"description": "Extraction de texte (OCR) et de champs structurés des fichiers attachés à la conversation (PDF, images de documents) : OCR brut via un connecteur externe, et extraction de champs typés façon MagicOCR (confiances, contrôles de cohérence, double extraction) via un modèle de vision, avec visualisation dans des panneaux interactifs (MCP Apps)",
 	"author": "AI Playground",
 	"license": "MIT",
 	"icon": "hugeicons:document-attachment",
 	"category": "productivity",
 	"requiredEnvVars": [],
-	"optionalEnvVars": ["OCR_ENDPOINT", "OCR_API_KEY"],
+	"optionalEnvVars": [
+		"OCR_ENDPOINT",
+		"OCR_API_KEY",
+		"OCR_MODEL",
+		"ANTHROPIC_API_KEY",
+		"AZURE_AI_API_KEY",
+		"AZURE_AI_ENDPOINT",
+		"AZURE_AI_DEPLOYMENT"
+	],
 	"configSchema": {
 		"type": "object",
 		"title": "OCR Configuration",
@@ -16,12 +24,35 @@
 			"endpoint": {
 				"type": "string",
 				"title": "Endpoint OCR",
-				"description": "URL du service OCR externe (ex: déploiement Mistral OCR sur Azure). Si vide, la variable d'environnement OCR_ENDPOINT est utilisée. Sans endpoint ni clé, l'outil fonctionne en mode démo (texte factice)."
+				"description": "URL du service Mistral Document AI (OCR). Une URL de base Azure AI Foundry (ex: https://<ressource>.services.ai.azure.com) est complétée automatiquement en /providers/mistral/azure/ocr ; une autre URL de base reçoit /v1/ocr ; une route complète se terminant par /ocr est utilisée telle quelle. Si vide, la variable d'environnement OCR_ENDPOINT est utilisée. Sans endpoint ni clé, l'outil fonctionne en mode démo (texte factice)."
 			},
 			"apiKey": {
 				"type": "string",
 				"title": "API Key",
-				"description": "Clé API du service OCR (Bearer token). Si vide, la variable d'environnement OCR_API_KEY est utilisée."
+				"description": "Clé API du service OCR (envoyée en Authorization: Bearer et api-key). Si vide, la variable d'environnement OCR_API_KEY est utilisée."
+			},
+			"ocrModel": {
+				"type": "string",
+				"title": "Modèle OCR",
+				"description": "Nom du modèle Mistral OCR (défaut: mistral-ocr-2503). Si vide, la variable d'environnement OCR_MODEL est utilisée."
+			},
+			"llmEndpoint": {
+				"type": "string",
+				"title": "Endpoint LLM (extraction de champs)",
+				"description": "URL de base de l'API Anthropic ou d'un proxy compatible (ex: proxy Azure AI) pour l'extraction de champs structurés. Si vide: https://api.anthropic.com, ou AZURE_AI_ENDPOINT quand la clé vient d'AZURE_AI_API_KEY.",
+				"x-ui-group": "Extraction de champs (LLM)"
+			},
+			"llmApiKey": {
+				"type": "string",
+				"title": "Clé API LLM",
+				"description": "Clé de l'API Anthropic (ou du proxy compatible). Si vide, les variables ANTHROPIC_API_KEY puis AZURE_AI_API_KEY sont utilisées. Sans clé, l'outil d'extraction de champs fonctionne en mode démo (valeurs factices).",
+				"x-ui-group": "Extraction de champs (LLM)"
+			},
+			"llmModel": {
+				"type": "string",
+				"title": "Modèle LLM",
+				"description": "Nom du modèle de vision (ex: claude-haiku-4-5). Si vide, AZURE_AI_DEPLOYMENT puis claude-haiku-4-5 par défaut.",
+				"x-ui-group": "Extraction de champs (LLM)"
 			}
 		}
 	},
@@ -38,6 +69,20 @@
 				"es": "- ocr_extract: extrae el texto (OCR) de un archivo adjunto a la conversación (PDF escaneado, imagen de documento)\n  - Parámetro file_url: usa EXACTAMENTE una de las URLs listadas en la nota de contexto sobre archivos disponibles para OCR, sin modificarla\n  - El resultado se muestra en un panel interactivo; el texto extraído también se devuelve en la respuesta de la herramienta\n  - Usa esta herramienta cuando el documento es un escaneo/foto sin capa de texto seleccionable, o cuando el usuario pide OCR explícitamente",
 				"zh": "- ocr_extract: 对会话附件（扫描 PDF、文档图片）进行文字识别 (OCR)\n  - file_url 参数: 必须完全使用上下文中 OCR 可用文件列表里的 URL，不得修改\n  - 结果会在交互面板中展示；提取的文本也会包含在工具返回中，便于回答用户问题\n  - 当文档是无可选文本层的扫描件/照片，或用户明确要求 OCR 时使用此工具",
 				"de": "- ocr_extract: extrahiert Text (OCR) aus einer an die Konversation angehängten Datei (gescanntes PDF, Dokumentbild)\n  - Parameter file_url: verwende EXAKT eine der im Kontext unter den für OCR verfügbaren Dateien gelisteten URLs, unverändert\n  - Das Ergebnis erscheint in einem interaktiven Panel; der extrahierte Text wird auch in der Tool-Antwort zurückgegeben\n  - Nutze dieses Tool, wenn das Dokument ein Scan/Foto ohne auswählbare Textebene ist oder der Nutzer explizit OCR verlangt"
+			}
+		},
+		{
+			"id": "extract_fields",
+			"name": "Extraction de champs structurés",
+			"description": "Extrait des champs structurés (valeurs typées avec confiances) d'un document attaché (PDF ou image : facture, formulaire, reçu…) via un modèle de vision, avec contrôles de cohérence et double extraction optionnelle. Résultat affiché dans un panneau interactif avec export CSV.",
+			"consumesConversationFiles": true,
+			"smartToolsHint": "STRUCTURED EXTRACTION: select this tool when the user wants SPECIFIC FIELDS or STRUCTURED DATA pulled out of an attached document (invoice number, amounts, dates, parties on an invoice/form/receipt/delivery note), wants the data as a table/CSV/Excel, or asks to 'extract the fields' — as opposed to ocr_extract which returns the raw full text.",
+			"systemPromptInstructions": {
+				"fr": "- ocr_extract_fields: extrait des CHAMPS STRUCTURÉS (valeurs typées) d'un fichier attaché à la conversation (PDF ou image : facture, formulaire, reçu…)\n  - Paramètre file_url: utilise EXACTEMENT une des URLs listées dans le contexte, sans la modifier\n  - Paramètre fields: construis la liste des champs d'après la demande de l'utilisateur — name (libellé exact), type ('text' | 'number' | 'date' | 'email'), required (booléen), validationRule (texte libre, optionnel)\n  - Paramètre coherenceChecks (optionnel): règles de cohérence en texte libre (ex: « le total TTC = total HT + TVA »)\n  - Paramètre doubleExtraction (optionnel): true pour deux extractions indépendantes croisées champ par champ (plus fiable, plus lent) — à utiliser si l'utilisateur demande de la fiabilité\n  - Le résultat (valeurs, confiances 0-100, erreurs, contrôles) s'affiche dans un panneau interactif avec export CSV, et t'est retourné en JSON pour répondre à l'utilisateur\n  - Pour plusieurs fichiers, appelle l'outil une fois par fichier",
+				"en": "- ocr_extract_fields: extracts STRUCTURED FIELDS (typed values) from a file attached to the conversation (PDF or image: invoice, form, receipt…)\n  - file_url parameter: use EXACTLY one of the URLs listed in the context, unmodified\n  - fields parameter: build the field list from the user's request — name (exact label), type ('text' | 'number' | 'date' | 'email'), required (boolean), validationRule (free text, optional)\n  - coherenceChecks parameter (optional): free-text consistency rules (e.g. \"total incl. tax = total excl. tax + VAT\")\n  - doubleExtraction parameter (optional): true to run two independent extractions cross-checked field by field (more reliable, slower) — use it when the user asks for reliability\n  - The result (values, 0-100 confidences, errors, checks) opens in an interactive panel with CSV export, and is returned to you as JSON so you can answer the user\n  - For several files, call the tool once per file",
+				"es": "- ocr_extract_fields: extrae CAMPOS ESTRUCTURADOS (valores tipados) de un archivo adjunto a la conversación (PDF o imagen: factura, formulario, recibo…)\n  - Parámetro file_url: usa EXACTAMENTE una de las URLs listadas en el contexto, sin modificarla\n  - Parámetro fields: construye la lista de campos según la petición del usuario — name (etiqueta exacta), type ('text' | 'number' | 'date' | 'email'), required (booleano), validationRule (texto libre, opcional)\n  - Parámetro coherenceChecks (opcional): reglas de coherencia en texto libre\n  - Parámetro doubleExtraction (opcional): true para dos extracciones independientes cruzadas campo a campo (más fiable, más lento)\n  - El resultado (valores, confianzas 0-100, errores, controles) se muestra en un panel interactivo con exportación CSV, y se te devuelve como JSON\n  - Para varios archivos, llama a la herramienta una vez por archivo",
+				"zh": "- ocr_extract_fields: 从会话附件（PDF 或图片：发票、表单、收据等）中提取结构化字段（带类型的值）\n  - file_url 参数: 必须完全使用上下文中列出的 URL，不得修改\n  - fields 参数: 根据用户需求构建字段列表 — name（准确名称）、type（'text' | 'number' | 'date' | 'email'）、required（布尔值）、validationRule（自由文本，可选）\n  - coherenceChecks 参数（可选）: 自由文本的一致性规则\n  - doubleExtraction 参数（可选）: true 时进行两次独立提取并逐字段交叉验证（更可靠但更慢）\n  - 结果（值、0-100 置信度、错误、检查项）会在交互面板中展示并支持 CSV 导出，同时以 JSON 返回给你以便回答用户\n  - 多个文件时，请对每个文件分别调用此工具",
+				"de": "- ocr_extract_fields: extrahiert STRUKTURIERTE FELDER (typisierte Werte) aus einer an die Konversation angehängten Datei (PDF oder Bild: Rechnung, Formular, Beleg…)\n  - Parameter file_url: verwende EXAKT eine der im Kontext gelisteten URLs, unverändert\n  - Parameter fields: baue die Feldliste aus der Nutzeranfrage — name (exakte Bezeichnung), type ('text' | 'number' | 'date' | 'email'), required (Boolean), validationRule (Freitext, optional)\n  - Parameter coherenceChecks (optional): Konsistenzregeln als Freitext\n  - Parameter doubleExtraction (optional): true für zwei unabhängige, feldweise gegengeprüfte Extraktionen (zuverlässiger, langsamer)\n  - Das Ergebnis (Werte, Konfidenzen 0-100, Fehler, Prüfungen) erscheint in einem interaktiven Panel mit CSV-Export und wird dir als JSON zurückgegeben\n  - Bei mehreren Dateien rufe das Tool einmal pro Datei auf"
 			}
 		}
 	],
