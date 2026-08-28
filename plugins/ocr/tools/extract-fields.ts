@@ -50,6 +50,7 @@ import {
 	type OcrPage,
 	type StoredOcrResult
 } from '../lib/result-store';
+import { estimateComparisonCost, type ComparisonCost } from '../lib/pricing';
 
 const EXTRACTION_ICON = 'hugeicons:document-validation';
 const EXTRACTION_PREFERRED_WIDTH = 640;
@@ -145,6 +146,14 @@ const MSG_TOKEN_USAGE: Record<Locale, string> = {
 	de: 'Token-Verbrauch — Vision (VLM): {vlmIn} Eingabe / {vlmOut} Ausgabe · Text (OCR): {ocrIn} Eingabe / {ocrOut} Ausgabe.'
 };
 
+const MSG_COST_SUMMARY: Record<Locale, string> = {
+	fr: 'Coût estimé — approche vision (VLM) : {vlm} · approche texte (Mistral OCR {pages} page(s) + LLM) : {ocr} (tarifs tokens openrouter.ai).',
+	en: 'Estimated cost — vision approach (VLM): {vlm} · text approach (Mistral OCR {pages} page(s) + LLM): {ocr} (token prices from openrouter.ai).',
+	es: 'Coste estimado — enfoque visión (VLM): {vlm} · enfoque texto (Mistral OCR {pages} página(s) + LLM): {ocr} (precios de tokens de openrouter.ai).',
+	zh: '估算成本 — 视觉方案（VLM）：{vlm} · 文本方案（Mistral OCR {pages} 页 + LLM）：{ocr}（token 价格来自 openrouter.ai）。',
+	de: 'Geschätzte Kosten — Vision-Ansatz (VLM): {vlm} · Text-Ansatz (Mistral OCR {pages} Seite(n) + LLM): {ocr} (Token-Preise von openrouter.ai).'
+};
+
 const MSG_COMPARE_FAILED: Record<Locale, string> = {
 	fr: 'Comparaison VLM/OCR impossible ({error}) — extraction vision seule.',
 	en: 'VLM/OCR comparison failed ({error}) — vision-only extraction.',
@@ -181,6 +190,8 @@ interface OcrPluginConfig {
 	endpoint?: string;
 	apiKey?: string;
 	ocrModel?: string;
+	/** Mistral OCR price in USD per page (page-billed, not on OpenRouter) — cost card. */
+	ocrPricePerPage?: number;
 }
 
 interface ExtractFieldsParams {
@@ -510,6 +521,19 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				}
 			}
 
+			// Cost estimate of the comparison (token prices from OpenRouter, Mistral
+			// OCR per page): best-effort — null leaves the panel with tokens only.
+			const ocrPageCount = ocrPagesForStore?.length ?? 0;
+			let costEstimate: ComparisonCost | null = null;
+			if (tokenUsage && llm) {
+				costEstimate = await estimateComparisonCost(
+					llm.model,
+					tokenUsage,
+					ocrPageCount,
+					config.ocrPricePerPage
+				);
+			}
+
 			// Provenance audit: when the compareWithOcr pass produced OCR text, check
 			// the model-reported quotes against it (verified/unverified flag on each
 			// source — soft signal for the panel, confidences untouched).
@@ -559,6 +583,14 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 						vlmOut: tokenUsage.vlm?.outputTokens ?? 0,
 						ocrIn: tokenUsage.ocr?.inputTokens ?? 0,
 						ocrOut: tokenUsage.ocr?.outputTokens ?? 0
+					})}`
+				: '';
+			const fmtUsd = (n: number) => `$${n.toFixed(4)}`;
+			const costSummary = costEstimate
+				? `\n${msg(MSG_COST_SUMMARY, locale, {
+						vlm: fmtUsd(costEstimate.vlmTotalUsd),
+						ocr: fmtUsd(costEstimate.ocrTotalUsd),
+						pages: ocrPageCount
 					})}`
 				: '';
 			const stubNotice = isStub ? `\n\n${msg(MSG_STUB_NOTICE, locale)}` : '';
@@ -629,7 +661,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			// to the short summary. The result JSON goes in `content`, which reaches
 			// the model via toModelOutput (and via the serialized replay on later turns).
 			return {
-				message: `${summary}${compareSummary}${tokenSummary}${compareNotice}${stubNotice}`,
+				message: `${summary}${compareSummary}${tokenSummary}${costSummary}${compareNotice}${stubNotice}`,
 				content: truncated,
 				data: {
 					...(docId ? { docId } : {}),
@@ -641,7 +673,8 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					templateFields: fields,
 					result,
 					...(comparison ? { comparison } : {}),
-					...(tokenUsage ? { tokenUsage } : {})
+					...(tokenUsage ? { tokenUsage: { ...tokenUsage, ocrPageCount } } : {}),
+					...(costEstimate ? { costEstimate } : {})
 				},
 				_meta: {
 					ui: {
