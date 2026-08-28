@@ -26,6 +26,21 @@ export interface OcrPageImage {
 	base64?: string;
 }
 
+/**
+ * A layout block detected on a page (Mistral `blocks`, OCR 4+ models with
+ * `include_blocks`): paragraph-level bounding box with a type label (text,
+ * title, list, table, equation, caption, code, header, footer, signature…).
+ * Coordinates in page pixels; `content` is deliberately NOT stored (the text
+ * already lives in `text`, keeping the panel payload lean).
+ */
+export interface OcrPageBlock {
+	type: string;
+	x0: number;
+	y0: number;
+	x1: number;
+	y1: number;
+}
+
 export interface OcrPage {
 	page: number;
 	text: string;
@@ -35,6 +50,8 @@ export interface OcrPage {
 	dpi?: number;
 	/** Detected images/figures with bounding boxes (Mistral `images`). */
 	images?: OcrPageImage[];
+	/** Paragraph-level layout blocks (Mistral `blocks`) — absent on older OCR models. */
+	blocks?: OcrPageBlock[];
 }
 
 /** Full viewer payload persisted as `results/<docId>.json`. */

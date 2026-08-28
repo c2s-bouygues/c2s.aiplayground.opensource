@@ -13,7 +13,7 @@
  * either depending on the resource configuration.
  */
 
-import type { OcrPage, OcrPageImage } from './result-store';
+import type { OcrPage, OcrPageBlock, OcrPageImage } from './result-store';
 import { splitPdfIntoImageBatches } from './pdf-split';
 
 export const DEFAULT_OCR_MODEL = 'mistral-ocr-2503';
@@ -160,18 +160,38 @@ export async function mistralOcr(
 		? { type: 'image_url', image_url: dataUrl }
 		: { type: 'document_url', document_url: dataUrl, document_name: fileName };
 
-	const response = await fetch(buildOcrUrl(connector.endpoint), {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${connector.apiKey}`,
-			'api-key': connector.apiKey
-		},
-		body: JSON.stringify({ model: connector.model, document, include_image_base64: true }),
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-	});
+	const callOcr = async (includeBlocks: boolean) =>
+		fetch(buildOcrUrl(connector.endpoint), {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${connector.apiKey}`,
+				'api-key': connector.apiKey
+			},
+			body: JSON.stringify({
+				model: connector.model,
+				document,
+				include_image_base64: true,
+				// Paragraph-level layout blocks (OCR 4+ models) — rendered as the
+				// viewer's "Zones texte" overlay. Retried without when rejected.
+				...(includeBlocks ? { include_blocks: true } : {})
+			}),
+			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+		});
 
-	const raw = await response.text().catch(() => '');
+	let response = await callOcr(true);
+	let raw = await response.text().catch(() => '');
+	// Older models/routes may reject the unknown `include_blocks` parameter —
+	// degrade to a blocks-less request instead of failing the extraction.
+	if (
+		!response.ok &&
+		response.status >= 400 &&
+		response.status < 500 &&
+		/include_blocks|extra_forbidden|unknown (field|parameter)|unexpected keyword/i.test(raw)
+	) {
+		response = await callOcr(false);
+		raw = await response.text().catch(() => '');
+	}
 	if (!response.ok) {
 		throw new Error(
 			`${response.status} ${response.statusText}${raw ? ` — ${raw.slice(0, 300)}` : ''}`
@@ -212,6 +232,18 @@ export async function mistralOcr(
 					}
 					return box;
 				});
+			// Paragraph-level blocks (OCR 4+): type + coordinates only — the text
+			// content already lives in the page markdown, keep the payload lean.
+			const blocks: OcrPageBlock[] = (Array.isArray(p.blocks) ? p.blocks : [])
+				.filter((b): b is Record<string, unknown> => typeof b === 'object' && b !== null)
+				.map((b) => ({
+					type: typeof b.type === 'string' && b.type !== '' ? b.type : 'text',
+					x0: toFiniteNumber(b.top_left_x) ?? 0,
+					y0: toFiniteNumber(b.top_left_y) ?? 0,
+					x1: toFiniteNumber(b.bottom_right_x) ?? 0,
+					y1: toFiniteNumber(b.bottom_right_y) ?? 0
+				}))
+				.filter((b) => b.x1 > b.x0 && b.y1 > b.y0);
 			return {
 				// Mistral pages are 0-based `index` with `markdown` content; tolerate
 				// the { page, text } shape for custom proxies.
@@ -222,7 +254,8 @@ export async function mistralOcr(
 				width: toFiniteNumber(dims.width),
 				height: toFiniteNumber(dims.height),
 				dpi: toFiniteNumber(dims.dpi),
-				...(images.length > 0 ? { images } : {})
+				...(images.length > 0 ? { images } : {}),
+				...(blocks.length > 0 ? { blocks } : {})
 			};
 		});
 }

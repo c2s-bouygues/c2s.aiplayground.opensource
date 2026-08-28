@@ -34,7 +34,7 @@
 			"ocrModel": {
 				"type": "string",
 				"title": "Modèle OCR",
-				"description": "Nom du modèle Mistral OCR (défaut: mistral-ocr-2503). Si vide, la variable d'environnement OCR_MODEL est utilisée."
+				"description": "Nom du modèle Mistral OCR (défaut: mistral-ocr-2503). Si vide, la variable d'environnement OCR_MODEL est utilisée. Les zones de texte typées du panneau (blocs, include_blocks) nécessitent un modèle OCR 4+ (ex: mistral-ocr-latest) — sans elles, le panneau se rabat sur la couche texte pdf.js des PDF natifs."
 			},
 			"llmEndpoint": {
 				"type": "string",

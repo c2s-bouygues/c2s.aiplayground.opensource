@@ -168,11 +168,16 @@ function stubOcr(fileName: string, contentType: string, byteLength: number): Ocr
 		{
 			page: 1,
 			text: `[STUB OCR] ${fileName} (${contentType}, ${byteLength} octets)\n\nCeci est un texte factice généré par le connecteur OCR de démonstration. Configurez un endpoint et une clé API dans l'administration du plugin pour obtenir une vraie extraction.`,
-			// Fake layout so the "Mise en page" tab is demonstrable without a backend.
+			// Fake layout so the "Document original" tab is demonstrable without a backend.
 			width: 1240,
 			height: 1754,
 			dpi: 150,
-			images: [{ id: 'stub-figure-0', x0: 124, y0: 350, x1: 1116, y1: 877 }]
+			images: [{ id: 'stub-figure-0', x0: 124, y0: 350, x1: 1116, y1: 877 }],
+			blocks: [
+				{ type: 'title', x0: 124, y0: 120, x1: 1116, y1: 200 },
+				{ type: 'text', x0: 124, y0: 950, x1: 1116, y1: 1400 },
+				{ type: 'footer', x0: 124, y0: 1650, x1: 1116, y1: 1700 }
+			]
 		},
 		{
 			page: 2,

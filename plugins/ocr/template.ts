@@ -13,9 +13,11 @@
  * - "Document original": the REAL document pages with two toggleable overlay
  *   layers — the detected figures' bounding boxes (Mistral `images`, percent
  *   coordinates of the page `dimensions`; on by default, the toggle is
- *   disabled with a tooltip when the document has none) and the text zones
- *   from the pdf.js TEXT LAYER (off by default, lazily computed; native-text
- *   PDFs only — Mistral basic OCR does not box text). The original document
+ *   disabled with a tooltip when the document has none) and the TEXT zones
+ *   (off by default, lazily computed) — sourced from the Mistral layout
+ *   blocks when present (`page.blocks`, OCR 4+ with include_blocks: typed
+ *   paragraph boxes colored per type, works on scans too), else from the
+ *   pdf.js TEXT LAYER (native-text PDFs only). The original document
  *   travels in the tool payload (`data.document`, size-capped): PDFs are
  *   rasterized client-side with pdf.js loaded from jsdelivr (declared in the
  *   appResource CSP — embed/iframe PDF is denied by the sandbox), images are
@@ -109,7 +111,14 @@ button.active { border-color: var(--accent); color: var(--accent); background: v
 }
 .bbox.text-box {
 	border: 1px solid var(--tbox); background: var(--tbox-bg); border-radius: 1px;
-	pointer-events: none;
+}
+/* Mistral block types get distinct colors (fixed rgba — legible in both themes). */
+.bbox.text-box[data-btype="title"] { border-color: rgba(124, 58, 237, 0.8); background: rgba(124, 58, 237, 0.08); }
+.bbox.text-box[data-btype="table"] { border-color: rgba(217, 119, 6, 0.8); background: rgba(217, 119, 6, 0.08); }
+.bbox.text-box[data-btype="equation"] { border-color: rgba(8, 145, 178, 0.8); background: rgba(8, 145, 178, 0.08); }
+.bbox.text-box[data-btype="signature"] { border-color: rgba(220, 38, 38, 0.8); background: rgba(220, 38, 38, 0.08); }
+.bbox.text-box[data-btype="header"], .bbox.text-box[data-btype="footer"] {
+	border-color: rgba(107, 114, 128, 0.8); background: rgba(107, 114, 128, 0.06); border-style: dashed;
 }
 #view-layout.hide-image-boxes .bbox.image-box { display: none; }
 #view-layout.hide-text-boxes .bbox.text-box { display: none; }
@@ -146,10 +155,12 @@ let fullText = '';
 let showImageBoxes = true;
 let showTextBoxes = false;
 let textBoxesLoaded = false;
-/** pdf.js document of the current render (text-box source); null on image/preview. */
+/** pdf.js document of the current render (text-box fallback source); null on image/preview. */
 let pdfDocRef = null;
 /** [{ sheet, pageNo, scale, width, height }] of the pdf.js-rendered pages. */
 let pdfSheets = [];
+/** [{ sheet, width, height, blocks }] — Mistral layout blocks (primary text-box source). */
+let blockSheets = [];
 
 function isFullPayload(v) {
 	return v && typeof v === 'object' && Array.isArray(v.pages);
@@ -247,14 +258,41 @@ async function renderPdfPage(pdfDoc, pageNo, sheet) {
 }
 
 /**
- * Text bounding boxes from the pdf.js TEXT LAYER (native-text PDFs only —
- * Mistral basic OCR does not box text). Computed lazily on the first "Zones
- * texte" activation, one overlay per text item, in % of the rendered canvas.
+ * Text bounding boxes, computed lazily on the first "Zones texte" activation.
+ * Two sources, by fidelity:
+ * - Mistral layout blocks (page.blocks, OCR 4+ with include_blocks):
+ *   paragraph-level, TYPED (title/table/equation/…, colored per type), and
+ *   available for scans and images too;
+ * - fallback: the pdf.js TEXT LAYER of the rendered PDF (native-text PDFs
+ *   only), one overlay per text item.
  * Returns the number of boxes drawn.
  */
 async function loadTextBoxes() {
 	textBoxesLoaded = true;
 	let count = 0;
+	if (blockSheets.length > 0) {
+		for (const entry of blockSheets) {
+			for (const block of entry.blocks) {
+				if (!block || typeof block !== 'object') continue;
+				const x0 = num(block.x0), y0 = num(block.y0), x1 = num(block.x1), y1 = num(block.y1);
+				if (x0 === null || y0 === null || x1 === null || y1 === null || x1 <= x0 || y1 <= y0) continue;
+				const type = typeof block.type === 'string' ? block.type : 'text';
+				// Image blocks duplicate the Mistral figure boxes of the other toggle.
+				if (type === 'image') continue;
+				const div = document.createElement('div');
+				div.className = 'bbox text-box';
+				div.dataset.btype = type;
+				div.title = type;
+				div.style.left = (x0 / entry.width) * 100 + '%';
+				div.style.top = (y0 / entry.height) * 100 + '%';
+				div.style.width = ((x1 - x0) / entry.width) * 100 + '%';
+				div.style.height = ((y1 - y0) / entry.height) * 100 + '%';
+				entry.sheet.appendChild(div);
+				count++;
+			}
+		}
+		return count;
+	}
 	for (const entry of pdfSheets) {
 		try {
 			const page = await pdfDocRef.getPage(entry.pageNo);
@@ -297,6 +335,7 @@ async function renderLayout(pages, doc) {
 	textBoxesLoaded = false;
 	pdfDocRef = null;
 	pdfSheets = [];
+	blockSheets = [];
 	container.classList.remove('hide-image-boxes');
 	container.classList.add('hide-text-boxes');
 
@@ -329,6 +368,10 @@ async function renderLayout(pages, doc) {
 		const sheet = document.createElement('div');
 		sheet.className = 'sheet';
 		if (width && height) sheet.style.aspectRatio = width + ' / ' + height;
+		// Mistral layout blocks (typed text zones) — primary "Zones texte" source.
+		if (width && height && Array.isArray(page.blocks) && page.blocks.length > 0) {
+			blockSheets.push({ sheet, width, height, blocks: page.blocks });
+		}
 
 		// Page background, by fidelity: real PDF page (pdf.js) > original image
 		// > thumbnail-style text preview (no CDN / file too big / not embedded).
@@ -441,7 +484,7 @@ function buildLayoutControls(container, totalBoxes) {
 	const txtBtn = document.createElement('button');
 	txtBtn.type = 'button';
 	txtBtn.textContent = currentLabels.textBoxes;
-	if (pdfSheets.length === 0) {
+	if (blockSheets.length === 0 && pdfSheets.length === 0) {
 		txtBtn.disabled = true;
 		txtBtn.title = currentLabels.textBoxesNone;
 	} else {
@@ -553,40 +596,40 @@ const LABELS = {
 		imageBoxes: 'Zones images', textBoxes: 'Zones texte',
 		imageBoxesTip: 'Afficher/masquer les zones d’images et figures détectées par Mistral OCR',
 		imageBoxesNone: 'Aucune image/figure détectée par Mistral OCR dans ce document',
-		textBoxesTip: 'Afficher/masquer les zones de texte issues de la couche texte du PDF',
-		textBoxesNone: 'Disponible uniquement pour les PDF avec texte natif'
+		textBoxesTip: 'Afficher/masquer les zones de texte (blocs Mistral OCR, sinon couche texte du PDF)',
+		textBoxesNone: 'Aucune zone de texte disponible (blocs Mistral absents et pas de couche texte PDF)'
 	},
 	en: {
 		text: 'Extracted text', layout: 'Original document',
 		imageBoxes: 'Image boxes', textBoxes: 'Text boxes',
 		imageBoxesTip: 'Show/hide the image/figure zones detected by Mistral OCR',
 		imageBoxesNone: 'No image/figure detected by Mistral OCR in this document',
-		textBoxesTip: 'Show/hide the text zones from the PDF text layer',
-		textBoxesNone: 'Only available for PDFs with a native text layer'
+		textBoxesTip: 'Show/hide the text zones (Mistral OCR blocks, else the PDF text layer)',
+		textBoxesNone: 'No text zones available (no Mistral blocks and no PDF text layer)'
 	},
 	es: {
 		text: 'Texto extraído', layout: 'Documento original',
 		imageBoxes: 'Zonas de imágenes', textBoxes: 'Zonas de texto',
 		imageBoxesTip: 'Mostrar/ocultar las zonas de imágenes y figuras detectadas por Mistral OCR',
 		imageBoxesNone: 'Ninguna imagen/figura detectada por Mistral OCR en este documento',
-		textBoxesTip: 'Mostrar/ocultar las zonas de texto de la capa de texto del PDF',
-		textBoxesNone: 'Solo disponible para PDF con texto nativo'
+		textBoxesTip: 'Mostrar/ocultar las zonas de texto (bloques de Mistral OCR, o la capa de texto del PDF)',
+		textBoxesNone: 'Ninguna zona de texto disponible (sin bloques Mistral y sin capa de texto PDF)'
 	},
 	zh: {
 		text: '提取的文本', layout: '原始文档',
 		imageBoxes: '图片区域', textBoxes: '文本区域',
 		imageBoxesTip: '显示/隐藏 Mistral OCR 检测到的图片/图形区域',
 		imageBoxesNone: '本文档中 Mistral OCR 未检测到图片/图形',
-		textBoxesTip: '显示/隐藏来自 PDF 文本层的文本区域',
-		textBoxesNone: '仅适用于包含原生文本层的 PDF'
+		textBoxesTip: '显示/隐藏文本区域（Mistral OCR 块，否则为 PDF 文本层）',
+		textBoxesNone: '无可用文本区域（无 Mistral 块且无 PDF 文本层）'
 	},
 	de: {
 		text: 'Extrahierter Text', layout: 'Originaldokument',
 		imageBoxes: 'Bildzonen', textBoxes: 'Textzonen',
 		imageBoxesTip: 'Bild-/Figurzonen von Mistral OCR ein-/ausblenden',
 		imageBoxesNone: 'Keine Bilder/Figuren von Mistral OCR in diesem Dokument erkannt',
-		textBoxesTip: 'Textzonen aus der PDF-Textebene ein-/ausblenden',
-		textBoxesNone: 'Nur für PDFs mit nativer Textebene verfügbar'
+		textBoxesTip: 'Textzonen ein-/ausblenden (Mistral-OCR-Blöcke, sonst PDF-Textebene)',
+		textBoxesNone: 'Keine Textzonen verfügbar (keine Mistral-Blöcke und keine PDF-Textebene)'
 	}
 };
 
