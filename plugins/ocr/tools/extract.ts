@@ -186,10 +186,13 @@ function stubOcr(fileName: string, contentType: string, byteLength: number): Ocr
 
 /**
  * Embed the original document in the app payload up to this size, so the
- * viewer's layout tab can render the real PDF pages (pdf.js) or the image
- * under the bounding boxes. Beyond it the tab falls back to the text preview.
+ * viewer's "Document original" tab can render the real PDF pages (pdf.js) or
+ * the image under the bounding boxes. Beyond it the tab falls back to the
+ * text preview. The document never reaches the LLM prompt (stored payload,
+ * fetched by the panel through the bridge), so the cost is storage + one
+ * bridge transfer (~+33% base64).
  */
-const FILE_EMBED_MAX_BYTES = 5 * 1024 * 1024;
+const FILE_EMBED_MAX_BYTES = 20 * 1024 * 1024;
 
 export function createExtractTool(context: PluginContext): AnyTool {
 	const { locale, logger, env } = context;

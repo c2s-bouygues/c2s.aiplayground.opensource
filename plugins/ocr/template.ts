@@ -4,19 +4,24 @@
  * Registered as `ui://ocr/viewer` (see the plugin's `appResources`) and served
  * by /api/mcp-apps/resource. The template carries NO per-call data: the host
  * delivers the tool result's `data` as `structuredContent` through the ext-apps
- * bridge (`ui/notifications/tool-result`). Theme arrives via `hostContext` and
- * `host-context-changed` notifications.
+ * bridge (`ui/notifications/tool-result`). Theme and locale arrive via
+ * `hostContext` and `host-context-changed` notifications (tab labels are
+ * localized, French in the static HTML).
  *
  * Two tabs:
- * - "Texte": the extracted text, one card per page.
- * - "Mise en page": the REAL document pages with the detected figures'
- *   bounding boxes (Mistral `images`) overlaid in percent coordinates of the
- *   page `dimensions`. The original document travels in the tool payload
- *   (`data.document`, size-capped): PDFs are rasterized client-side with
- *   pdf.js loaded from jsdelivr (declared in the appResource CSP — embed/
- *   iframe PDF is denied by the sandbox), images are shown directly. When the
- *   document is absent (too big) or pdf.js can't load (no CDN access), the
- *   page falls back to a text-preview sheet at the true aspect ratio.
+ * - "Texte extrait": the extracted text, one card per page.
+ * - "Document original": the REAL document pages with two toggleable overlay
+ *   layers — the detected figures' bounding boxes (Mistral `images`, percent
+ *   coordinates of the page `dimensions`; on by default, the toggle is
+ *   disabled with a tooltip when the document has none) and the text zones
+ *   from the pdf.js TEXT LAYER (off by default, lazily computed; native-text
+ *   PDFs only — Mistral basic OCR does not box text). The original document
+ *   travels in the tool payload (`data.document`, size-capped): PDFs are
+ *   rasterized client-side with pdf.js loaded from jsdelivr (declared in the
+ *   appResource CSP — embed/iframe PDF is denied by the sandbox), images are
+ *   shown directly. When the document is absent (too big) or pdf.js can't
+ *   load (no CDN access), the page falls back to a text-preview sheet at the
+ *   true aspect ratio.
  *
  * OCR output is untrusted (it re-renders whatever the connector extracted from
  * a user file), so every string goes through `textContent` — never innerHTML —
@@ -41,11 +46,13 @@ export function renderOcrViewerTemplate(): string {
 	--bg: #f8f9fb; --panel: #ffffff; --text: #1c1e26; --muted: #6b7280;
 	--border: #e5e7eb; --accent: #2563eb; --badge-stub: #b45309; --badge-stub-bg: #fef3c7;
 	--badge-real: #047857; --badge-real-bg: #d1fae5; --sheet: #ffffff; --box: rgba(37, 99, 235, 0.08);
+	--tbox: rgba(4, 120, 87, 0.75); --tbox-bg: rgba(4, 120, 87, 0.08);
 }
 html.theme-dark {
 	--bg: #1b1d24; --panel: #23252e; --text: #e6e8ee; --muted: #9ca3af;
 	--border: #363943; --accent: #60a5fa; --badge-stub: #fcd34d; --badge-stub-bg: #45350c;
 	--badge-real: #6ee7b7; --badge-real-bg: #0c3d2e; --sheet: #2a2d38; --box: rgba(96, 165, 250, 0.12);
+	--tbox: rgba(110, 231, 183, 0.75); --tbox-bg: rgba(110, 231, 183, 0.1);
 }
 html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
 	font-family: system-ui, -apple-system, sans-serif; font-size: 14px; }
@@ -62,6 +69,10 @@ button {
 	border: 1px solid var(--border); background: var(--panel); color: var(--text);
 }
 button:hover { border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button:disabled:hover { border-color: var(--border); color: var(--text); }
+button.active { border-color: var(--accent); color: var(--accent); background: var(--bg); font-weight: 600; }
+.layout-controls { display: flex; gap: 6px; flex-wrap: wrap; }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
 .tab {
 	font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; border: none;
@@ -96,6 +107,12 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 	position: absolute; box-sizing: border-box; border: 2px solid var(--accent);
 	background: var(--box); border-radius: 2px;
 }
+.bbox.text-box {
+	border: 1px solid var(--tbox); background: var(--tbox-bg); border-radius: 1px;
+	pointer-events: none;
+}
+#view-layout.hide-image-boxes .bbox.image-box { display: none; }
+#view-layout.hide-text-boxes .bbox.text-box { display: none; }
 .bbox img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .bbox .tag {
 	position: absolute; top: -1px; left: -1px; font-size: 10px; line-height: 1;
@@ -115,8 +132,8 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 		<div class="toolbar"><button id="copy" hidden>Copier</button></div>
 	</header>
 	<div class="tabs" id="tabs" hidden>
-		<button class="tab active" id="tab-text">Texte</button>
-		<button class="tab" id="tab-layout">Mise en page</button>
+		<button class="tab active" id="tab-text">Texte extrait</button>
+		<button class="tab" id="tab-layout">Document original</button>
 	</div>
 	<div class="view" id="view-text"><div class="empty">En attente du résultat OCR…</div></div>
 	<div class="view" id="view-layout" hidden></div>
@@ -125,6 +142,14 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 import { App } from '/api/mcp-apps/vendor/app.js';
 
 let fullText = '';
+// "Document original" overlay toggles — reset at each render.
+let showImageBoxes = true;
+let showTextBoxes = false;
+let textBoxesLoaded = false;
+/** pdf.js document of the current render (text-box source); null on image/preview. */
+let pdfDocRef = null;
+/** [{ sheet, pageNo, scale, width, height }] of the pdf.js-rendered pages. */
+let pdfSheets = [];
 
 function isFullPayload(v) {
 	return v && typeof v === 'object' && Array.isArray(v.pages);
@@ -206,17 +231,55 @@ async function loadPdf(doc) {
 	}
 }
 
-/** Rasterize one PDF page into a canvas covering the sheet. */
+/** Rasterize one PDF page into a canvas covering the sheet; returns the render geometry. */
 async function renderPdfPage(pdfDoc, pageNo, sheet) {
 	const page = await pdfDoc.getPage(pageNo);
 	const base = page.getViewport({ scale: 1 });
-	const viewport = page.getViewport({ scale: Math.min(2, 1200 / base.width) });
+	const scale = Math.min(2, 1200 / base.width);
+	const viewport = page.getViewport({ scale });
 	const canvas = document.createElement('canvas');
 	canvas.width = Math.round(viewport.width);
 	canvas.height = Math.round(viewport.height);
 	sheet.style.aspectRatio = canvas.width + ' / ' + canvas.height;
 	sheet.appendChild(canvas);
 	await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+	return { scale, width: canvas.width, height: canvas.height };
+}
+
+/**
+ * Text bounding boxes from the pdf.js TEXT LAYER (native-text PDFs only —
+ * Mistral basic OCR does not box text). Computed lazily on the first "Zones
+ * texte" activation, one overlay per text item, in % of the rendered canvas.
+ * Returns the number of boxes drawn.
+ */
+async function loadTextBoxes() {
+	textBoxesLoaded = true;
+	let count = 0;
+	for (const entry of pdfSheets) {
+		try {
+			const page = await pdfDocRef.getPage(entry.pageNo);
+			const textContent = await page.getTextContent();
+			const viewport = page.getViewport({ scale: entry.scale });
+			for (const item of textContent.items) {
+				if (typeof item.str !== 'string' || item.str.trim() === '') continue;
+				const t = item.transform;
+				const rect = viewport.convertToViewportRectangle([
+					t[4], t[5], t[4] + (item.width || 0), t[5] + (item.height || 0)
+				]);
+				const div = document.createElement('div');
+				div.className = 'bbox text-box';
+				div.style.left = (Math.min(rect[0], rect[2]) / entry.width) * 100 + '%';
+				div.style.top = (Math.min(rect[1], rect[3]) / entry.height) * 100 + '%';
+				div.style.width = (Math.abs(rect[2] - rect[0]) / entry.width) * 100 + '%';
+				div.style.height = (Math.abs(rect[3] - rect[1]) / entry.height) * 100 + '%';
+				entry.sheet.appendChild(div);
+				count++;
+			}
+		} catch (e) {
+			console.warn('text boxes failed for page ' + entry.pageNo, e);
+		}
+	}
+	return count;
 }
 
 async function renderLayout(pages, doc) {
@@ -227,17 +290,18 @@ async function renderLayout(pages, doc) {
 		(n, p) => n + (Array.isArray(p.images) ? p.images.length : 0),
 		0
 	);
-	// Mistral basic OCR only boxes detected FIGURES — a text-only document
-	// legitimately has zero boxes; say it instead of leaving it implicit.
-	if (totalBoxes === 0 && pages.length > 0) {
-		const notice = document.createElement('div');
-		notice.className = 'notice';
-		notice.textContent =
-			'Aucune image/figure détectée dans ce document — les bounding boxes de Mistral OCR ne couvrent que les images, pas le texte.';
-		container.appendChild(notice);
-	}
+
+	// Reset the overlay toggles for this render (images ON, text OFF).
+	showImageBoxes = true;
+	showTextBoxes = false;
+	textBoxesLoaded = false;
+	pdfDocRef = null;
+	pdfSheets = [];
+	container.classList.remove('hide-image-boxes');
+	container.classList.add('hide-text-boxes');
 
 	const pdfDoc = await loadPdf(doc);
+	pdfDocRef = pdfDoc;
 	const imageUri =
 		doc &&
 		typeof doc.mediaType === 'string' &&
@@ -271,7 +335,8 @@ async function renderLayout(pages, doc) {
 		let background = 'preview';
 		if (pdfDoc && pageNo !== null && pageNo >= 1 && pageNo <= pdfDoc.numPages) {
 			try {
-				await renderPdfPage(pdfDoc, pageNo, sheet);
+				const geometry = await renderPdfPage(pdfDoc, pageNo, sheet);
+				pdfSheets.push({ sheet, pageNo, ...geometry });
 				background = 'pdf';
 			} catch (e) {
 				console.warn('pdf.js page render failed', e);
@@ -298,7 +363,7 @@ async function renderLayout(pages, doc) {
 				const x0 = num(box.x0), y0 = num(box.y0), x1 = num(box.x1), y1 = num(box.y1);
 				if (x0 === null || y0 === null || x1 === null || y1 === null || x1 <= x0 || y1 <= y0) continue;
 				const div = document.createElement('div');
-				div.className = 'bbox';
+				div.className = 'bbox image-box';
 				div.style.left = (x0 / width) * 100 + '%';
 				div.style.top = (y0 / height) * 100 + '%';
 				div.style.width = ((x1 - x0) / width) * 100 + '%';
@@ -341,7 +406,62 @@ async function renderLayout(pages, doc) {
 		empty.className = 'empty';
 		empty.textContent = 'Pas de données de mise en page (le connecteur n’a pas fourni les dimensions des pages).';
 		container.appendChild(empty);
+		return;
 	}
+	container.prepend(buildLayoutControls(container, totalBoxes));
+}
+
+/**
+ * Overlay toggles of the "Document original" tab: Mistral image/figure boxes
+ * (on by default; disabled with an explanatory tooltip when the document has
+ * none — Mistral basic OCR only boxes figures) and pdf.js text-layer boxes
+ * (off by default; native-text PDFs only, loaded lazily on first activation).
+ */
+function buildLayoutControls(container, totalBoxes) {
+	const bar = document.createElement('div');
+	bar.className = 'layout-controls';
+
+	const imgBtn = document.createElement('button');
+	imgBtn.type = 'button';
+	imgBtn.textContent = currentLabels.imageBoxes + ' (' + totalBoxes + ')';
+	if (totalBoxes === 0) {
+		imgBtn.disabled = true;
+		imgBtn.title = currentLabels.imageBoxesNone;
+	} else {
+		imgBtn.classList.add('active');
+		imgBtn.title = currentLabels.imageBoxesTip;
+		imgBtn.addEventListener('click', () => {
+			showImageBoxes = !showImageBoxes;
+			container.classList.toggle('hide-image-boxes', !showImageBoxes);
+			imgBtn.classList.toggle('active', showImageBoxes);
+		});
+	}
+	bar.appendChild(imgBtn);
+
+	const txtBtn = document.createElement('button');
+	txtBtn.type = 'button';
+	txtBtn.textContent = currentLabels.textBoxes;
+	if (pdfSheets.length === 0) {
+		txtBtn.disabled = true;
+		txtBtn.title = currentLabels.textBoxesNone;
+	} else {
+		txtBtn.title = currentLabels.textBoxesTip;
+		txtBtn.addEventListener('click', async () => {
+			if (txtBtn.disabled) return;
+			showTextBoxes = !showTextBoxes;
+			if (showTextBoxes && !textBoxesLoaded) {
+				txtBtn.disabled = true;
+				const count = await loadTextBoxes();
+				txtBtn.disabled = false;
+				txtBtn.textContent = currentLabels.textBoxes + ' (' + count + ')';
+			}
+			container.classList.toggle('hide-text-boxes', !showTextBoxes);
+			txtBtn.classList.toggle('active', showTextBoxes);
+		});
+	}
+	bar.appendChild(txtBtn);
+
+	return bar;
 }
 
 function selectTab(which) {
@@ -426,17 +546,73 @@ function applyTheme(theme) {
 	document.documentElement.classList.toggle('theme-dark', theme === 'dark');
 }
 
+// UI labels localized from hostContext.locale (fr is the HTML default).
+const LABELS = {
+	fr: {
+		text: 'Texte extrait', layout: 'Document original',
+		imageBoxes: 'Zones images', textBoxes: 'Zones texte',
+		imageBoxesTip: 'Afficher/masquer les zones d’images et figures détectées par Mistral OCR',
+		imageBoxesNone: 'Aucune image/figure détectée par Mistral OCR dans ce document',
+		textBoxesTip: 'Afficher/masquer les zones de texte issues de la couche texte du PDF',
+		textBoxesNone: 'Disponible uniquement pour les PDF avec texte natif'
+	},
+	en: {
+		text: 'Extracted text', layout: 'Original document',
+		imageBoxes: 'Image boxes', textBoxes: 'Text boxes',
+		imageBoxesTip: 'Show/hide the image/figure zones detected by Mistral OCR',
+		imageBoxesNone: 'No image/figure detected by Mistral OCR in this document',
+		textBoxesTip: 'Show/hide the text zones from the PDF text layer',
+		textBoxesNone: 'Only available for PDFs with a native text layer'
+	},
+	es: {
+		text: 'Texto extraído', layout: 'Documento original',
+		imageBoxes: 'Zonas de imágenes', textBoxes: 'Zonas de texto',
+		imageBoxesTip: 'Mostrar/ocultar las zonas de imágenes y figuras detectadas por Mistral OCR',
+		imageBoxesNone: 'Ninguna imagen/figura detectada por Mistral OCR en este documento',
+		textBoxesTip: 'Mostrar/ocultar las zonas de texto de la capa de texto del PDF',
+		textBoxesNone: 'Solo disponible para PDF con texto nativo'
+	},
+	zh: {
+		text: '提取的文本', layout: '原始文档',
+		imageBoxes: '图片区域', textBoxes: '文本区域',
+		imageBoxesTip: '显示/隐藏 Mistral OCR 检测到的图片/图形区域',
+		imageBoxesNone: '本文档中 Mistral OCR 未检测到图片/图形',
+		textBoxesTip: '显示/隐藏来自 PDF 文本层的文本区域',
+		textBoxesNone: '仅适用于包含原生文本层的 PDF'
+	},
+	de: {
+		text: 'Extrahierter Text', layout: 'Originaldokument',
+		imageBoxes: 'Bildzonen', textBoxes: 'Textzonen',
+		imageBoxesTip: 'Bild-/Figurzonen von Mistral OCR ein-/ausblenden',
+		imageBoxesNone: 'Keine Bilder/Figuren von Mistral OCR in diesem Dokument erkannt',
+		textBoxesTip: 'Textzonen aus der PDF-Textebene ein-/ausblenden',
+		textBoxesNone: 'Nur für PDFs mit nativer Textebene verfügbar'
+	}
+};
+
+let currentLabels = LABELS.fr;
+
+function applyLocale(locale) {
+	const base = typeof locale === 'string' ? locale.slice(0, 2).toLowerCase() : 'fr';
+	currentLabels = LABELS[base] || LABELS.fr;
+	document.getElementById('tab-text').textContent = currentLabels.text;
+	document.getElementById('tab-layout').textContent = currentLabels.layout;
+}
+
+function applyHostContext(ctx) {
+	if (!ctx) return;
+	if (ctx.theme === 'dark' || ctx.theme === 'light') applyTheme(ctx.theme);
+	if (ctx.locale) applyLocale(ctx.locale);
+}
+
 const app = new App({ name: 'ocr-viewer', version: '1.0.0' });
 app.ontoolresult = (result) => {
 	const sc = result && result.structuredContent;
 	if (sc) render(sc);
 };
-app.onhostcontextchanged = (ctx) => {
-	if (ctx && (ctx.theme === 'dark' || ctx.theme === 'light')) applyTheme(ctx.theme);
-};
+app.onhostcontextchanged = (ctx) => applyHostContext(ctx);
 await app.connect();
-const ctx = app.getHostContext();
-if (ctx && (ctx.theme === 'dark' || ctx.theme === 'light')) applyTheme(ctx.theme);
+applyHostContext(app.getHostContext());
 </script>
 </body>
 </html>`;
