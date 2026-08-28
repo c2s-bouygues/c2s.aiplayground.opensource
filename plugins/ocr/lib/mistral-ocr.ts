@@ -232,8 +232,9 @@ export async function mistralOcr(
 					}
 					return box;
 				});
-			// Paragraph-level blocks (OCR 4+): type + coordinates only — the text
-			// content already lives in the page markdown, keep the payload lean.
+			// Paragraph-level blocks (OCR 4+). `content` rides in the stored payload
+			// (never the LLM prompt): it lets the extraction panel match a provenance
+			// quote to a block and highlight it on scans/images.
 			const blocks: OcrPageBlock[] = (Array.isArray(p.blocks) ? p.blocks : [])
 				.filter((b): b is Record<string, unknown> => typeof b === 'object' && b !== null)
 				.map((b) => ({
@@ -241,7 +242,8 @@ export async function mistralOcr(
 					x0: toFiniteNumber(b.top_left_x) ?? 0,
 					y0: toFiniteNumber(b.top_left_y) ?? 0,
 					x1: toFiniteNumber(b.bottom_right_x) ?? 0,
-					y1: toFiniteNumber(b.bottom_right_y) ?? 0
+					y1: toFiniteNumber(b.bottom_right_y) ?? 0,
+					...(typeof b.content === 'string' && b.content !== '' ? { content: b.content } : {})
 				}))
 				.filter((b) => b.x1 > b.x0 && b.y1 > b.y0);
 			return {

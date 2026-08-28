@@ -30,8 +30,10 @@ export interface OcrPageImage {
  * A layout block detected on a page (Mistral `blocks`, OCR 4+ models with
  * `include_blocks`): paragraph-level bounding box with a type label (text,
  * title, list, table, equation, caption, code, header, footer, signature…).
- * Coordinates in page pixels; `content` is deliberately NOT stored (the text
- * already lives in `text`, keeping the panel payload lean).
+ * Coordinates in page pixels. `content` duplicates the page text block by
+ * block — kept in the STORED payload only (never in the LLM prompt) so the
+ * extraction panel can locate a provenance quote inside a block and highlight
+ * it on scans/images, where the pdf.js text layer does not exist.
  */
 export interface OcrPageBlock {
 	type: string;
@@ -39,6 +41,7 @@ export interface OcrPageBlock {
 	y0: number;
 	x1: number;
 	y1: number;
+	content?: string;
 }
 
 export interface OcrPage {

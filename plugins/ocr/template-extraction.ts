@@ -24,9 +24,10 @@
  * the chat), rendering PDFs with pdf.js from jsdelivr and images directly.
  * Per-field provenance (result.fieldSources, model-reported) renders as a
  * "p. N" chip whose tooltip carries the exact quote; clicking it opens the
- * preview, highlights the quote on the page through the pdf.js text layer
- * (native-text PDFs — scanned pages fall back to a plain scroll) and scrolls
- * to it.
+ * preview, highlights the quote on the page — via the pdf.js text layer on
+ * native-text PDFs, else via the Mistral layout blocks stored with the OCR
+ * pages (paragraph granularity, works on scans/images) — and scrolls to it;
+ * plain page scroll when neither source matches.
  *
  * Extracted values are untrusted (they come from a user document through an
  * LLM), so every string goes through `textContent` — never innerHTML.
@@ -184,8 +185,10 @@ let docPaneOpen = false;
 let docPaneLoadPromise = null;
 /** pdf.js document of the rendered preview (native-text PDFs) — quote highlighting. */
 let pdfDocRef = null;
-/** page number → { sheet, scale } of the rendered PDF pages. */
+/** page number → { sheet, scale } of the rendered pages (scale null for images). */
 let sheetInfo = new Map();
+/** OCR pages of the fetched payload (with Mistral blocks) — quote-highlight fallback. */
+let payloadPages = [];
 
 const CONF_TOOLTIP = 'Seuils de confiance — ≥ 80 % : fiable · 60–79 % : à vérifier · < 60 % : douteux';
 /** Above this length a value is collapsed behind a « voir plus » toggle. */
@@ -547,6 +550,7 @@ async function renderDocPane() {
 			arguments: { doc: currentDocId, include_document: true }
 		});
 		const sc = res && res.structuredContent;
+		payloadPages = sc && Array.isArray(sc.pages) ? sc.pages : [];
 		const doc = sc && sc.document;
 		if (!doc || typeof doc.dataUri !== 'string') {
 			docPaneNotice(pane, 'Aperçu indisponible (document trop volumineux ou non conservé).');
@@ -555,11 +559,16 @@ async function renderDocPane() {
 		}
 		if (typeof doc.mediaType === 'string' && doc.mediaType.startsWith('image/')) {
 			pane.textContent = '';
+			// Positioned wrapper so quote highlights can overlay the image too.
+			const sheet = document.createElement('div');
+			sheet.className = 'sheet';
+			sheet.dataset.page = '1';
 			const img = document.createElement('img');
 			img.src = doc.dataUri; // data: URI rebuilt by the plugin from the stored file
 			img.alt = 'Document original';
-			img.dataset.page = '1';
-			pane.appendChild(img);
+			sheet.appendChild(img);
+			pane.appendChild(sheet);
+			sheetInfo.set(1, { sheet, scale: null });
 			docPaneState = 'loaded';
 			return;
 		}
@@ -641,16 +650,10 @@ function findQuoteItems(items, quote) {
 	return spans.filter((s) => s.end > at && s.start < to).map((s) => s.index);
 }
 
-/**
- * Highlight the provenance quote on a rendered PDF page via the pdf.js text
- * layer (native-text PDFs only — scanned pages have no text items). Overlays
- * are positioned in % of the canvas so the responsive scaling keeps them
- * aligned. Returns the first highlight element, or null when nothing matched.
- */
-async function highlightQuoteOnPage(page, quote) {
-	for (const el of document.querySelectorAll('#docpane .hl')) el.remove();
+/** pdf.js text-layer highlight (line/fragment granularity, native-text PDFs). */
+async function highlightViaPdfTextLayer(page, quote) {
 	const info = sheetInfo.get(page);
-	if (!pdfDocRef || !info || typeof quote !== 'string' || quote === '') return null;
+	if (!pdfDocRef || !info || info.scale === null) return null;
 	try {
 		const pdfPage = await pdfDocRef.getPage(page);
 		const textContent = await pdfPage.getTextContent();
@@ -679,9 +682,59 @@ async function highlightQuoteOnPage(page, quote) {
 		}
 		return first;
 	} catch (e) {
-		console.warn('quote highlight failed', e);
+		console.warn('pdf.js quote highlight failed', e);
 		return null;
 	}
+}
+
+/**
+ * Mistral layout-blocks highlight (paragraph granularity — works on scans and
+ * images, where there is no pdf.js text layer). Looks for the quote in the
+ * block contents of the given page first, then of the other pages (the model's
+ * page claim can be off); highlights the whole matching block.
+ */
+function highlightViaBlocks(page, quote) {
+	const needle = normalizeMatchText(quote).trim();
+	if (needle.length < 3) return null;
+	const claimed = payloadPages.filter((p) => p && p.page === page);
+	const others = payloadPages.filter((p) => p && p.page !== page);
+	for (const p of claimed.concat(others)) {
+		const width = typeof p.width === 'number' ? p.width : 0;
+		const height = typeof p.height === 'number' ? p.height : 0;
+		if (!width || !height || !Array.isArray(p.blocks)) continue;
+		const info = sheetInfo.get(p.page);
+		if (!info) continue;
+		for (const block of p.blocks) {
+			if (!block || typeof block.content !== 'string') continue;
+			if (!normalizeMatchText(block.content).includes(needle)) continue;
+			const x0 = block.x0, y0 = block.y0, x1 = block.x1, y1 = block.y1;
+			if (typeof x0 !== 'number' || typeof y0 !== 'number'
+				|| typeof x1 !== 'number' || typeof y1 !== 'number' || x1 <= x0 || y1 <= y0) continue;
+			const hl = document.createElement('div');
+			hl.className = 'hl';
+			hl.style.left = (x0 / width) * 100 + '%';
+			hl.style.top = (y0 / height) * 100 + '%';
+			hl.style.width = ((x1 - x0) / width) * 100 + '%';
+			hl.style.height = ((y1 - y0) / height) * 100 + '%';
+			info.sheet.appendChild(hl);
+			return hl;
+		}
+	}
+	return null;
+}
+
+/**
+ * Highlight the provenance quote in the preview — by fidelity: pdf.js text
+ * layer (finest), then Mistral layout blocks (paragraph-level, scans/images
+ * included). Overlays are positioned in % so responsive scaling keeps them
+ * aligned. Returns the first highlight element, or null when nothing matched.
+ */
+async function highlightQuoteOnPage(page, quote) {
+	for (const el of document.querySelectorAll('#docpane .hl')) el.remove();
+	if (typeof quote !== 'string' || quote === '') return null;
+	const viaPdf = await highlightViaPdfTextLayer(page, quote);
+	if (viaPdf) return viaPdf;
+	return highlightViaBlocks(page, quote);
 }
 
 /**
@@ -742,6 +795,7 @@ function render(data) {
 	docPaneLoadPromise = null;
 	pdfDocRef = null;
 	sheetInfo = new Map();
+	payloadPages = [];
 	const docPane = document.getElementById('docpane');
 	docPane.hidden = true;
 	docPane.textContent = '';
