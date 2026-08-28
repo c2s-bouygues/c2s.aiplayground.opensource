@@ -11,7 +11,9 @@
  * compatible proxy (e.g. the "Azure AI" proxy MagicOCR uses in production).
  *
  * Faithful ports from MagicOCR:
- * - `buildExtractionPrompt` (prompt text unchanged)
+ * - `buildExtractionPrompt` (prompt text extended with a per-field provenance
+ *   contract: `fieldSources` — page number + short exact quote — rendered by
+ *   the extraction panel as verifiable "p. N" links)
  * - required-field post-validation
  * - double extraction: two independent calls merged field by field with
  *   confidence penalties (×0.8 when only one call found a value, ×0.6 on
@@ -19,6 +21,8 @@
  * Errors never throw out of the extraction functions: they degrade into a
  * result with `confidence: 0` and an `errors` entry (MagicOCR behavior).
  */
+
+import { foldText } from './result-store';
 
 export interface TemplateField {
 	name: string;
@@ -38,10 +42,26 @@ export interface CoherenceCheckResult {
 	message: string;
 }
 
+/** Where a field's value was found in the document (model-reported, verifiable). */
+export interface FieldSource {
+	/** 1-based page number; null when the model could not tell. */
+	page: number | null;
+	/** Short exact quote of the passage containing the value; null when unknown. */
+	quote: string | null;
+	/**
+	 * Set by verifyFieldSources when OCR text is available: true when the quote
+	 * was found in the OCR text (page corrected if needed), false when it was
+	 * not. Absent when no OCR text was available to check against.
+	 */
+	verified?: boolean;
+}
+
 export interface ExtractionResult {
 	fields: Record<string, unknown>;
 	confidence: number;
 	fieldConfidences: Record<string, number>;
+	/** Per-field provenance (absent when the model returned none). */
+	fieldSources?: Record<string, FieldSource>;
 	errors: string[];
 	warnings: string[];
 	coherenceCheckResults: CoherenceCheckResult[];
@@ -61,7 +81,10 @@ export type DocumentBlock =
 	| { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } };
 
 const LLM_TIMEOUT_MS = 120_000;
-const MAX_TOKENS = 4096;
+// MagicOCR used 4096; the provenance quotes (fieldSources) lengthen the answer.
+const MAX_TOKENS = 8192;
+/** Provenance quotes are display material — keep them bounded whatever the model does. */
+const MAX_SOURCE_QUOTE_CHARS = 200;
 const ANTHROPIC_VERSION = '2023-06-01';
 
 export const IMAGE_MEDIA_TYPES = new Set([
@@ -116,6 +139,7 @@ Instructions:
 5. Si un champ n'est pas trouvé, indique null
 6. Indique ton niveau de confiance (0-100) pour chaque champ
 7. Vérifie les règles de cohérence si présentes
+8. Pour chaque champ trouvé, indique dans fieldSources la page où la valeur apparaît (numéro à partir de 1) et une citation courte et EXACTE du passage contenant la valeur (moins de 150 caractères, texte tel qu'il apparaît dans le document) ; utilise null quand tu ne peux pas le déterminer
 
 Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
 {
@@ -125,6 +149,9 @@ Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
   "confidence": 85,
   "fieldConfidences": {
     "Nom du champ": 90
+  },
+  "fieldSources": {
+    "Nom du champ": { "page": 1, "quote": "citation exacte du passage" }
   },
   "errors": ["liste des erreurs détectées"],
   "warnings": ["liste des avertissements"],
@@ -138,7 +165,7 @@ Réponds UNIQUEMENT avec un JSON valide dans ce format exact:
 }`;
 }
 
-/** Prompt ported verbatim from MagicOcrV2 `buildExtractionPrompt` (vision input). */
+/** Prompt ported from MagicOcrV2 `buildExtractionPrompt` (vision input), extended with fieldSources. */
 export function buildExtractionPrompt(
 	fields: TemplateField[],
 	coherenceChecks: CoherenceCheck[]
@@ -161,7 +188,7 @@ export function buildTextExtractionPrompt(
 		documentText.length > MAX_TEXT_PROMPT_CHARS
 			? `${documentText.slice(0, MAX_TEXT_PROMPT_CHARS)}\n[…texte tronqué]`
 			: documentText;
-	return `Tu es un expert en extraction de données de documents. Analyse le TEXTE de document suivant (obtenu par OCR) et extrait les informations demandées.
+	return `Tu es un expert en extraction de données de documents. Analyse le TEXTE de document suivant (obtenu par OCR) et extrait les informations demandées. Les pages sont délimitées par des marqueurs « --- Page N --- » : utilise-les pour renseigner les numéros de page de fieldSources.
 
 Texte du document:
 ---
@@ -197,6 +224,24 @@ function normalizeResult(parsed: Record<string, unknown>): ExtractionResult {
 		}
 	}
 
+	// Provenance: keep only well-formed entries; cap quotes (display material).
+	const fieldSources: Record<string, FieldSource> = {};
+	if (typeof parsed.fieldSources === 'object' && parsed.fieldSources !== null) {
+		for (const [key, value] of Object.entries(parsed.fieldSources as Record<string, unknown>)) {
+			if (typeof value !== 'object' || value === null) continue;
+			const v = value as Record<string, unknown>;
+			const page =
+				typeof v.page === 'number' && Number.isFinite(v.page) && v.page >= 1
+					? Math.round(v.page)
+					: null;
+			const quote =
+				typeof v.quote === 'string' && v.quote.trim() !== ''
+					? v.quote.slice(0, MAX_SOURCE_QUOTE_CHARS)
+					: null;
+			if (page !== null || quote !== null) fieldSources[key] = { page, quote };
+		}
+	}
+
 	return {
 		fields:
 			typeof parsed.fields === 'object' && parsed.fields !== null
@@ -204,6 +249,7 @@ function normalizeResult(parsed: Record<string, unknown>): ExtractionResult {
 				: {},
 		confidence: toNumber(parsed.confidence, 0),
 		fieldConfidences,
+		...(Object.keys(fieldSources).length > 0 ? { fieldSources } : {}),
 		errors: toStringArray(parsed.errors),
 		warnings: toStringArray(parsed.warnings),
 		coherenceCheckResults
@@ -259,18 +305,37 @@ async function callClaude(llm: LlmConfig, content: unknown[]): Promise<Extractio
 		throw new Error(`${response.status} ${response.statusText}${body ? ` — ${body.slice(0, 300)}` : ''}`);
 	}
 
-	const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
+	const data = (await response.json()) as {
+		content?: Array<{ type?: string; text?: string }>;
+		stop_reason?: string;
+	};
 	const text = (data.content ?? [])
 		.filter((c) => c.type === 'text' && typeof c.text === 'string')
 		.map((c) => c.text)
 		.join('');
 
+	// A max_tokens stop means the JSON answer was cut mid-stream: name the real
+	// cause (too many fields in one call) instead of a cryptic parse error.
+	const truncated = data.stop_reason === 'max_tokens';
 	// MagicOCR parsing: first JSON object in the free-text answer.
 	const match = text.match(/\{[\s\S]*\}/);
 	if (!match) {
-		throw new Error('réponse du modèle sans JSON exploitable');
+		throw new Error(
+			truncated
+				? 'réponse tronquée (max_tokens atteint) — trop de champs demandés en un seul appel'
+				: 'réponse du modèle sans JSON exploitable'
+		);
 	}
-	return normalizeResult(JSON.parse(match[0]) as Record<string, unknown>);
+	try {
+		return normalizeResult(JSON.parse(match[0]) as Record<string, unknown>);
+	} catch (error) {
+		if (truncated) {
+			throw new Error(
+				'réponse tronquée (max_tokens atteint) — trop de champs demandés en un seul appel'
+			);
+		}
+		throw error;
+	}
 }
 
 /**
@@ -364,6 +429,12 @@ export async function extractWithDoubleValidation(
 		coherenceCheckResults: [],
 		...(r1.failed && r2.failed ? { failed: true } : {})
 	};
+	const mergedSources: Record<string, FieldSource> = {};
+	// The provenance follows the value that was kept.
+	const keepSource = (name: string, from: ExtractionResult, fallback?: ExtractionResult) => {
+		const source = from.fieldSources?.[name] ?? fallback?.fieldSources?.[name];
+		if (source) mergedSources[name] = source;
+	};
 
 	for (const field of fields) {
 		const name = field.name;
@@ -375,23 +446,28 @@ export async function extractWithDoubleValidation(
 		if (JSON.stringify(v1) === JSON.stringify(v2)) {
 			merged.fields[name] = v1;
 			merged.fieldConfidences[name] = Math.max(c1, c2);
+			keepSource(name, r1, r2);
 		} else if (v1 === null) {
 			merged.fields[name] = v2;
 			merged.fieldConfidences[name] = c2 * 0.8;
+			keepSource(name, r2);
 			merged.warnings.push(`Champ "${name}": trouvé par une seule des deux extractions`);
 		} else if (v2 === null) {
 			merged.fields[name] = v1;
 			merged.fieldConfidences[name] = c1 * 0.8;
+			keepSource(name, r1);
 			merged.warnings.push(`Champ "${name}": trouvé par une seule des deux extractions`);
 		} else {
 			const useFirst = c1 >= c2;
 			merged.fields[name] = useFirst ? v1 : v2;
 			merged.fieldConfidences[name] = (useFirst ? c1 : c2) * 0.6;
+			keepSource(name, useFirst ? r1 : r2);
 			merged.warnings.push(
 				`Champ "${name}": divergence entre les deux extractions (${JSON.stringify(v1)} vs ${JSON.stringify(v2)})`
 			);
 		}
 	}
+	if (Object.keys(mergedSources).length > 0) merged.fieldSources = mergedSources;
 
 	const confidences = Object.values(merged.fieldConfidences);
 	merged.confidence =
@@ -417,6 +493,80 @@ export async function extractWithDoubleValidation(
 	merged.coherenceCheckResults = [...byName.values()];
 
 	return merged;
+}
+
+/**
+ * Merge the results of several field-batched extraction calls over the SAME
+ * document into one ExtractionResult (large field lists — e.g. one field per
+ * requirement — are split into bounded calls so the model's JSON answer never
+ * hits max_tokens). Field maps are disjoint by construction; coherence checks
+ * ride with the first batch only, so concatenation is a plain union. `failed`
+ * survives only when every batch failed (partial results stay usable, the
+ * per-batch degraded errors tell the rest).
+ */
+export function mergeBatchResults(results: ExtractionResult[]): ExtractionResult {
+	const merged: ExtractionResult = {
+		fields: {},
+		confidence: 0,
+		fieldConfidences: {},
+		errors: [],
+		warnings: [],
+		coherenceCheckResults: []
+	};
+	const sources: Record<string, FieldSource> = {};
+	let allFailed = results.length > 0;
+	for (const result of results) {
+		if (!result.failed) allFailed = false;
+		Object.assign(merged.fields, result.fields);
+		Object.assign(merged.fieldConfidences, result.fieldConfidences);
+		if (result.fieldSources) Object.assign(sources, result.fieldSources);
+		merged.errors.push(...result.errors);
+		merged.warnings.push(...result.warnings);
+		merged.coherenceCheckResults.push(...result.coherenceCheckResults);
+	}
+	if (Object.keys(sources).length > 0) merged.fieldSources = sources;
+	const confidences = Object.values(merged.fieldConfidences);
+	merged.confidence =
+		confidences.length > 0
+			? Math.round(confidences.reduce((sum, c) => sum + c, 0) / confidences.length)
+			: 0;
+	if (allFailed) merged.failed = true;
+	return merged;
+}
+
+/** Accent/case-insensitive, whitespace-normalized form used for quote matching. */
+function normalizeForMatch(text: string): string {
+	return foldText(text).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Check the model-reported provenance quotes against the OCR'd page texts
+ * (the only ground truth available): a quote found in a page marks the source
+ * `verified: true` — trusting the OCR text over the model's page claim when
+ * they disagree — and a quote found nowhere marks it `verified: false` (soft
+ * signal rendered by the panel; confidence is deliberately NOT altered, since
+ * a literal match can fail on legitimate OCR/VLM transcription differences).
+ * Mutates `result.fieldSources` in place; no-op without sources or pages.
+ */
+export function verifyFieldSources(
+	result: ExtractionResult,
+	pages: Array<{ page: number; text: string }>
+): void {
+	if (!result.fieldSources || pages.length === 0) return;
+	const normPages = pages.map((p) => ({ page: p.page, text: normalizeForMatch(p.text) }));
+	for (const source of Object.values(result.fieldSources)) {
+		if (!source.quote) continue;
+		const needle = normalizeForMatch(source.quote);
+		// Too short to be discriminating — matching would prove nothing.
+		if (needle.length < 5) continue;
+		const hits = normPages.filter((p) => p.text.includes(needle)).map((p) => p.page);
+		if (hits.length === 0) {
+			source.verified = false;
+			continue;
+		}
+		source.verified = true;
+		if (source.page === null || !hits.includes(source.page)) source.page = hits[0];
+	}
 }
 
 /** Per-field detail of the VLM-vs-OCR comparison, rendered by the MCP App. */
@@ -453,6 +603,12 @@ export function compareExtractions(
 		coherenceCheckResults: []
 	};
 	const comparison: FieldComparison[] = [];
+	const mergedSources: Record<string, FieldSource> = {};
+	// The provenance follows the value that was kept.
+	const keepSource = (name: string, from: ExtractionResult, fallback?: ExtractionResult) => {
+		const source = from.fieldSources?.[name] ?? fallback?.fieldSources?.[name];
+		if (source) mergedSources[name] = source;
+	};
 
 	for (const field of fields) {
 		const name = field.name;
@@ -466,23 +622,28 @@ export function compareExtractions(
 		if (agree) {
 			merged.fields[name] = v;
 			merged.fieldConfidences[name] = Math.max(cv, co);
+			keepSource(name, vlm, ocr);
 		} else if (v === null) {
 			merged.fields[name] = o;
 			merged.fieldConfidences[name] = co * 0.8;
+			keepSource(name, ocr);
 			merged.warnings.push(`Champ "${name}": trouvé uniquement par l'extraction texte (OCR)`);
 		} else if (o === null) {
 			merged.fields[name] = v;
 			merged.fieldConfidences[name] = cv * 0.8;
+			keepSource(name, vlm);
 			merged.warnings.push(`Champ "${name}": trouvé uniquement par l'extraction vision (VLM)`);
 		} else {
 			const useVlm = cv >= co;
 			merged.fields[name] = useVlm ? v : o;
 			merged.fieldConfidences[name] = (useVlm ? cv : co) * 0.6;
+			keepSource(name, useVlm ? vlm : ocr);
 			merged.warnings.push(
 				`Champ "${name}": divergence VLM/OCR (${JSON.stringify(v)} vs ${JSON.stringify(o)})`
 			);
 		}
 	}
+	if (Object.keys(mergedSources).length > 0) merged.fieldSources = mergedSources;
 
 	const confidences = Object.values(merged.fieldConfidences);
 	merged.confidence =
@@ -522,6 +683,7 @@ export function stubExtraction(
 		fields: {},
 		confidence: 75,
 		fieldConfidences: {},
+		fieldSources: {},
 		errors: [],
 		warnings: ['Résultat de démonstration (connecteur LLM non configuré)'],
 		coherenceCheckResults: coherenceChecks.map((c) => ({
@@ -545,6 +707,10 @@ export function stubExtraction(
 				result.fields[field.name] = `[STUB] valeur de ${field.name}`;
 		}
 		result.fieldConfidences[field.name] = 75;
+		result.fieldSources![field.name] = {
+			page: 1,
+			quote: `Extrait simulé pour « ${field.name} » (mode démo)`
+		};
 	}
 	return result;
 }

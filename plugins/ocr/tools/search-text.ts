@@ -106,7 +106,7 @@ export function createSearchTextTool(context: PluginContext): AnyTool {
 		}),
 		execute: async (
 			params
-		): Promise<{ message: string; data?: Record<string, unknown> }> => {
+		): Promise<{ message: string; content?: string; data?: Record<string, unknown> }> => {
 			const query = (params.query ?? '').trim();
 			if (query === '') {
 				return { message: msg(MSG_EMPTY_QUERY, locale) };
@@ -167,15 +167,26 @@ export function createSearchTextTool(context: PluginContext): AnyTool {
 					`- offset ${m.char_offset}: …${m.before.replace(/\s+/g, ' ')}【${m.match}】${m.after.replace(/\s+/g, ' ')}…`
 			);
 
+			// `message` is the ONLY field the host UI renders in the tool step — keep it
+			// to the summary line. The occurrence list goes in `content` (model-only via
+			// toModelOutput; replayed with the serialized output on later turns).
 			return {
-				message: `${msg(MSG_RESULTS, locale, {
+				message: msg(MSG_RESULTS, locale, {
 					shown: matches.length,
 					total: totalLabel,
 					query,
 					docId,
 					totalChars: text.length
-				})}\n\n${lines.join('\n')}`,
+				}),
+				content: lines.join('\n'),
 				data: { docId, total_matches: total, matches }
+			};
+		},
+		toModelOutput: ({ output }) => {
+			const o = output as { message: string; content?: string };
+			return {
+				type: 'text' as const,
+				value: o.content ? `${o.message}\n\n${o.content}` : o.message
 			};
 		}
 	});

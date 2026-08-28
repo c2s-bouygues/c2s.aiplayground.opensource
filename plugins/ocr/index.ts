@@ -24,6 +24,7 @@ import { createExtractFieldsTool } from './tools/extract-fields';
 import { createReadTextTool } from './tools/read-text';
 import { createSearchTextTool } from './tools/search-text';
 import { createGetResultTool } from './tools/get-result';
+import { createSaveExportTool } from './tools/save-export';
 import { OCR_VIEWER_RESOURCE_URI, renderOcrViewerTemplate } from './template';
 import {
 	EXTRACTION_VIEWER_RESOURCE_URI,
@@ -58,6 +59,13 @@ const tools: PluginToolDefinition[] = [
 		// payload (pages, boxes, document) to the ui://ocr/viewer iframe.
 		id: 'get_result',
 		createTool: (ctx) => createGetResultTool(ctx)
+	},
+	{
+		// Panel export feed (bridge-only by convention): stores the extraction
+		// panel's CSV so the host can download it via its /api/files URL (the
+		// sandboxed iframe has no allow-downloads).
+		id: 'save_export',
+		createTool: (ctx) => createSaveExportTool(ctx)
 	}
 ];
 
@@ -83,7 +91,14 @@ const plugin: PluginExport = {
 		{
 			uri: EXTRACTION_VIEWER_RESOURCE_URI,
 			title: 'Structured field extraction viewer',
-			getHtml: renderExtractionViewerTemplate
+			getHtml: renderExtractionViewerTemplate,
+			// Same needs as the OCR viewer: the side-by-side document preview
+			// renders PDF pages with pdf.js from jsdelivr ('blob:' for its worker).
+			meta: {
+				csp: {
+					resourceDomains: ['https://cdn.jsdelivr.net', 'blob:']
+				}
+			}
 		}
 	],
 
