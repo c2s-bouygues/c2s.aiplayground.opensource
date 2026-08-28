@@ -56,6 +56,25 @@ export interface FieldSource {
 	verified?: boolean;
 }
 
+/** Anthropic token consumption, accumulated over the calls behind one result. */
+export interface TokenUsage {
+	inputTokens: number;
+	outputTokens: number;
+	/** Number of Messages API calls the counters cover (batches, double passes). */
+	calls: number;
+}
+
+/** Sum two optional usages; undefined when neither side reported anything. */
+export function addUsage(a?: TokenUsage, b?: TokenUsage): TokenUsage | undefined {
+	if (!a) return b;
+	if (!b) return a;
+	return {
+		inputTokens: a.inputTokens + b.inputTokens,
+		outputTokens: a.outputTokens + b.outputTokens,
+		calls: a.calls + b.calls
+	};
+}
+
 export interface ExtractionResult {
 	fields: Record<string, unknown>;
 	confidence: number;
@@ -67,6 +86,8 @@ export interface ExtractionResult {
 	coherenceCheckResults: CoherenceCheckResult[];
 	/** true when the LLM call itself failed (transport/parse) — no data at all. */
 	failed?: boolean;
+	/** Anthropic token consumption (absent in stub mode / on failed calls). */
+	usage?: TokenUsage;
 }
 
 export interface LlmConfig {
@@ -308,11 +329,19 @@ async function callClaude(llm: LlmConfig, content: unknown[]): Promise<Extractio
 	const data = (await response.json()) as {
 		content?: Array<{ type?: string; text?: string }>;
 		stop_reason?: string;
+		usage?: { input_tokens?: number; output_tokens?: number };
 	};
 	const text = (data.content ?? [])
 		.filter((c) => c.type === 'text' && typeof c.text === 'string')
 		.map((c) => c.text)
 		.join('');
+
+	// Token accounting for the panel's consumption card (VLM-vs-OCR comparison).
+	const usage: TokenUsage = {
+		inputTokens: toNumber(data.usage?.input_tokens, 0),
+		outputTokens: toNumber(data.usage?.output_tokens, 0),
+		calls: 1
+	};
 
 	// A max_tokens stop means the JSON answer was cut mid-stream: name the real
 	// cause (too many fields in one call) instead of a cryptic parse error.
@@ -327,7 +356,9 @@ async function callClaude(llm: LlmConfig, content: unknown[]): Promise<Extractio
 		);
 	}
 	try {
-		return normalizeResult(JSON.parse(match[0]) as Record<string, unknown>);
+		const result = normalizeResult(JSON.parse(match[0]) as Record<string, unknown>);
+		result.usage = usage;
+		return result;
 	} catch (error) {
 		if (truncated) {
 			throw new Error(
@@ -420,6 +451,7 @@ export async function extractWithDoubleValidation(
 		extractFromDocument(llm, block, fields, coherenceChecks)
 	]);
 
+	const usage = addUsage(r1.usage, r2.usage);
 	const merged: ExtractionResult = {
 		fields: {},
 		confidence: 0,
@@ -427,7 +459,8 @@ export async function extractWithDoubleValidation(
 		errors: [...r1.errors, ...r2.errors],
 		warnings: [...r1.warnings, ...r2.warnings],
 		coherenceCheckResults: [],
-		...(r1.failed && r2.failed ? { failed: true } : {})
+		...(r1.failed && r2.failed ? { failed: true } : {}),
+		...(usage ? { usage } : {})
 	};
 	const mergedSources: Record<string, FieldSource> = {};
 	// The provenance follows the value that was kept.
@@ -515,6 +548,7 @@ export function mergeBatchResults(results: ExtractionResult[]): ExtractionResult
 	};
 	const sources: Record<string, FieldSource> = {};
 	let allFailed = results.length > 0;
+	let usage: TokenUsage | undefined;
 	for (const result of results) {
 		if (!result.failed) allFailed = false;
 		Object.assign(merged.fields, result.fields);
@@ -523,7 +557,9 @@ export function mergeBatchResults(results: ExtractionResult[]): ExtractionResult
 		merged.errors.push(...result.errors);
 		merged.warnings.push(...result.warnings);
 		merged.coherenceCheckResults.push(...result.coherenceCheckResults);
+		usage = addUsage(usage, result.usage);
 	}
+	if (usage) merged.usage = usage;
 	if (Object.keys(sources).length > 0) merged.fieldSources = sources;
 	const confidences = Object.values(merged.fieldConfidences);
 	merged.confidence =
@@ -594,13 +630,15 @@ export function compareExtractions(
 	ocr: ExtractionResult,
 	fields: TemplateField[]
 ): { result: ExtractionResult; comparison: FieldComparison[] } {
+	const usage = addUsage(vlm.usage, ocr.usage);
 	const merged: ExtractionResult = {
 		fields: {},
 		confidence: 0,
 		fieldConfidences: {},
 		errors: [...vlm.errors, ...ocr.errors],
 		warnings: [...vlm.warnings, ...ocr.warnings],
-		coherenceCheckResults: []
+		coherenceCheckResults: [],
+		...(usage ? { usage } : {})
 	};
 	const comparison: FieldComparison[] = [];
 	const mergedSources: Record<string, FieldSource> = {};

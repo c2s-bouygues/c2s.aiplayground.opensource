@@ -34,7 +34,8 @@ import {
 	type ExtractionResult,
 	type FieldComparison,
 	type LlmConfig,
-	type TemplateField
+	type TemplateField,
+	type TokenUsage
 } from '../lib/extraction';
 import {
 	batchedMistralOcr,
@@ -49,6 +50,7 @@ import {
 	type OcrPage,
 	type StoredOcrResult
 } from '../lib/result-store';
+import { estimateComparisonCost, type ComparisonCost } from '../lib/pricing';
 
 const EXTRACTION_ICON = 'hugeicons:document-validation';
 const EXTRACTION_PREFERRED_WIDTH = 640;
@@ -136,6 +138,22 @@ const MSG_LLM_ERROR: Record<Locale, string> = {
 	de: 'Fehler des Extraktions-LLM-Konnektors: {error}. Prüfe die Konfiguration des OCR-Plugins (llmEndpoint/llmApiKey/llmModel) — für Azure AI Foundry genügt die Basis-URL https://<Ressource>.services.ai.azure.com (die Route /anthropic/v1/messages wird automatisch ergänzt).'
 };
 
+const MSG_TOKEN_USAGE: Record<Locale, string> = {
+	fr: 'Consommation de tokens — vision (VLM) : {vlmIn} entrée / {vlmOut} sortie · texte (OCR) : {ocrIn} entrée / {ocrOut} sortie.',
+	en: 'Token consumption — vision (VLM): {vlmIn} input / {vlmOut} output · text (OCR): {ocrIn} input / {ocrOut} output.',
+	es: 'Consumo de tokens — visión (VLM): {vlmIn} entrada / {vlmOut} salida · texto (OCR): {ocrIn} entrada / {ocrOut} salida.',
+	zh: 'Token 消耗 — 视觉（VLM）：输入 {vlmIn} / 输出 {vlmOut} · 文本（OCR）：输入 {ocrIn} / 输出 {ocrOut}。',
+	de: 'Token-Verbrauch — Vision (VLM): {vlmIn} Eingabe / {vlmOut} Ausgabe · Text (OCR): {ocrIn} Eingabe / {ocrOut} Ausgabe.'
+};
+
+const MSG_COST_SUMMARY: Record<Locale, string> = {
+	fr: 'Coût estimé — approche vision (VLM) : {vlm} · approche texte (Mistral OCR {pages} page(s) + LLM) : {ocr} (tarifs tokens openrouter.ai).',
+	en: 'Estimated cost — vision approach (VLM): {vlm} · text approach (Mistral OCR {pages} page(s) + LLM): {ocr} (token prices from openrouter.ai).',
+	es: 'Coste estimado — enfoque visión (VLM): {vlm} · enfoque texto (Mistral OCR {pages} página(s) + LLM): {ocr} (precios de tokens de openrouter.ai).',
+	zh: '估算成本 — 视觉方案（VLM）：{vlm} · 文本方案（Mistral OCR {pages} 页 + LLM）：{ocr}（token 价格来自 openrouter.ai）。',
+	de: 'Geschätzte Kosten — Vision-Ansatz (VLM): {vlm} · Text-Ansatz (Mistral OCR {pages} Seite(n) + LLM): {ocr} (Token-Preise von openrouter.ai).'
+};
+
 const MSG_COMPARE_FAILED: Record<Locale, string> = {
 	fr: 'Comparaison VLM/OCR impossible ({error}) — extraction vision seule.',
 	en: 'VLM/OCR comparison failed ({error}) — vision-only extraction.',
@@ -172,6 +190,8 @@ interface OcrPluginConfig {
 	endpoint?: string;
 	apiKey?: string;
 	ocrModel?: string;
+	/** Mistral OCR price in USD per page (page-billed, not on OpenRouter) — cost card. */
+	ocrPricePerPage?: number;
 }
 
 interface ExtractFieldsParams {
@@ -413,6 +433,8 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 
 			let result: ExtractionResult;
 			let comparison: FieldComparison[] | null = null;
+			/** Per-side Anthropic token consumption of the comparison, for the panel. */
+			let tokenUsage: { vlm?: TokenUsage; ocr?: TokenUsage } | null = null;
 			let compareNotice = '';
 			/** OCR pages from the compareWithOcr pass, reused for the stored panel payload. */
 			let ocrPagesForStore: OcrPage[] | null = null;
@@ -482,6 +504,12 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 								const compared = compareExtractions(vlmResult, ocrResult, fields);
 								result = compared.result;
 								comparison = compared.comparison;
+								if (vlmResult.usage || ocrResult.usage) {
+									tokenUsage = {
+										...(vlmResult.usage ? { vlm: vlmResult.usage } : {}),
+										...(ocrResult.usage ? { ocr: ocrResult.usage } : {})
+									};
+								}
 							}
 						} catch (error) {
 							compareNotice = `\n${msg(MSG_COMPARE_FAILED, locale, {
@@ -491,6 +519,19 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 						}
 					}
 				}
+			}
+
+			// Cost estimate of the comparison (token prices from OpenRouter, Mistral
+			// OCR per page): best-effort — null leaves the panel with tokens only.
+			const ocrPageCount = ocrPagesForStore?.length ?? 0;
+			let costEstimate: ComparisonCost | null = null;
+			if (tokenUsage && llm) {
+				costEstimate = await estimateComparisonCost(
+					llm.model,
+					tokenUsage,
+					ocrPageCount,
+					config.ocrPricePerPage
+				);
 			}
 
 			// Provenance audit: when the compareWithOcr pass produced OCR text, check
@@ -534,6 +575,22 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				? `\n${msg(MSG_COMPARE_DONE, locale, {
 						agree: comparison.filter((c) => c.agree).length,
 						disagree: comparison.filter((c) => !c.agree).length
+					})}`
+				: '';
+			const tokenSummary = tokenUsage
+				? `\n${msg(MSG_TOKEN_USAGE, locale, {
+						vlmIn: tokenUsage.vlm?.inputTokens ?? 0,
+						vlmOut: tokenUsage.vlm?.outputTokens ?? 0,
+						ocrIn: tokenUsage.ocr?.inputTokens ?? 0,
+						ocrOut: tokenUsage.ocr?.outputTokens ?? 0
+					})}`
+				: '';
+			const fmtUsd = (n: number) => `$${n.toFixed(4)}`;
+			const costSummary = costEstimate
+				? `\n${msg(MSG_COST_SUMMARY, locale, {
+						vlm: fmtUsd(costEstimate.vlmTotalUsd),
+						ocr: fmtUsd(costEstimate.ocrTotalUsd),
+						pages: ocrPageCount
 					})}`
 				: '';
 			const stubNotice = isStub ? `\n\n${msg(MSG_STUB_NOTICE, locale)}` : '';
@@ -604,7 +661,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			// to the short summary. The result JSON goes in `content`, which reaches
 			// the model via toModelOutput (and via the serialized replay on later turns).
 			return {
-				message: `${summary}${compareSummary}${compareNotice}${stubNotice}`,
+				message: `${summary}${compareSummary}${tokenSummary}${costSummary}${compareNotice}${stubNotice}`,
 				content: truncated,
 				data: {
 					...(docId ? { docId } : {}),
@@ -615,7 +672,9 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					status,
 					templateFields: fields,
 					result,
-					...(comparison ? { comparison } : {})
+					...(comparison ? { comparison } : {}),
+					...(tokenUsage ? { tokenUsage: { ...tokenUsage, ocrPageCount } } : {}),
+					...(costEstimate ? { costEstimate } : {})
 				},
 				_meta: {
 					ui: {

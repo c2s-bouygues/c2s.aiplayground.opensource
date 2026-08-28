@@ -14,7 +14,11 @@
  * workflow: corrected values are marked, revertible, and flow into the CSV),
  * a "needs review" filter, the VLM vs OCR comparison merged as a status column
  * (divergent rows expand to show both values with the differing segment
- * highlighted), coherence-check results, errors/warnings, and a CSV export
+ * highlighted), coherence-check results, errors/warnings, a consumption card
+ * when the comparison ran (Anthropic input/output tokens of the VLM and
+ * OCR-text sides from `data.tokenUsage`, plus per-approach USD cost estimates
+ * from `data.costEstimate` — OpenRouter token prices + page-billed Mistral
+ * OCR — when the server could resolve them), and a CSV export
  * (copy + download; the CSV layout mirrors MagicOCR's "Résultats" sheet: one
  * row per document, `;` separator and UTF-8 BOM for French Excel, plus a
  * trailing "Champs corrigés" column listing manually corrected fields), and a
@@ -989,6 +993,78 @@ function render(data) {
 		}
 		issuesCard.appendChild(list);
 		body.appendChild(issuesCard);
+	}
+
+	// --- Consumption & estimated cost (compareWithOcr runs) ---
+	// Token counts come from the extraction LLM (Anthropic usage); the cost
+	// estimate (data.costEstimate, server-side via the OpenRouter catalog) adds
+	// the page-billed Mistral OCR pass so both APPROACHES compare fairly:
+	// vision = VLM tokens; text = Mistral OCR pages + LLM-over-text tokens.
+	const usage = data.tokenUsage;
+	const cost = data.costEstimate && typeof data.costEstimate === 'object' ? data.costEstimate : null;
+	if (usage && typeof usage === 'object' && (usage.vlm || usage.ocr)) {
+		const ocrPageCount = typeof usage.ocrPageCount === 'number' ? usage.ocrPageCount : 0;
+		const usageCard = makeCard(cost
+			? 'Consommation et coût estimé (VLM vs OCR)'
+			: 'Consommation de tokens (VLM vs OCR)');
+		const utable = document.createElement('table');
+		const uhead = document.createElement('thead');
+		const uheadRow = document.createElement('tr');
+		const uheaders = ['Poste', 'Tokens entrée', 'Tokens sortie', 'Appels LLM'];
+		if (cost) uheaders.push('Coût estimé (USD)');
+		for (const label of uheaders) {
+			const th = document.createElement('th');
+			th.textContent = label;
+			uheadRow.appendChild(th);
+		}
+		uhead.appendChild(uheadRow);
+		utable.appendChild(uhead);
+		const ubody = document.createElement('tbody');
+		const fmtTokens = (n) => (typeof n === 'number' ? n.toLocaleString('fr-FR') : '—');
+		const fmtUsd = (n) => (typeof n === 'number' ? '$' + n.toFixed(4) : '—');
+		const addUsageRow = (label, cells, isTotal) => {
+			const tr = document.createElement('tr');
+			for (const text of [label].concat(cells)) {
+				const td = document.createElement('td');
+				td.textContent = text;
+				if (isTotal) td.style.fontWeight = '600';
+				tr.appendChild(td);
+			}
+			ubody.appendChild(tr);
+		};
+		const tokenCells = (u) => [fmtTokens(u && u.inputTokens), fmtTokens(u && u.outputTokens), fmtTokens(u && u.calls)];
+		if (usage.vlm) {
+			addUsageRow('Vision (VLM) — appels LLM',
+				tokenCells(usage.vlm).concat(cost ? [fmtUsd(cost.vlmLlmUsd)] : []), false);
+		}
+		if (usage.ocr) {
+			addUsageRow('Texte (OCR) — appels LLM',
+				tokenCells(usage.ocr).concat(cost ? [fmtUsd(cost.ocrLlmUsd)] : []), false);
+		}
+		if (ocrPageCount > 0) {
+			addUsageRow('Texte (OCR) — passage Mistral OCR',
+				[ocrPageCount + ' page(s)', '—', '—'].concat(cost ? [fmtUsd(cost.ocrPagesUsd)] : []), false);
+		}
+		if (cost && usage.vlm && usage.ocr) {
+			addUsageRow('Total approche vision (VLM)',
+				tokenCells(usage.vlm).concat([fmtUsd(cost.vlmTotalUsd)]), true);
+			addUsageRow('Total approche texte (OCR + LLM)',
+				tokenCells(usage.ocr).concat([fmtUsd(cost.ocrTotalUsd)]), true);
+		}
+		utable.appendChild(ubody);
+		usageCard.appendChild(utable);
+		const usageNote = document.createElement('div');
+		usageNote.style.fontSize = '11px';
+		usageNote.style.color = 'var(--muted)';
+		usageNote.style.marginTop = '6px';
+		usageNote.textContent = cost
+			? 'Montants indicatifs en USD — tarifs tokens via openrouter.ai (' + String(cost.pricingModel)
+				+ ' : ' + Number(cost.inputPerMTok).toFixed(2) + ' $ entrée / '
+				+ Number(cost.outputPerMTok).toFixed(2) + ' $ sortie par million de tokens), Mistral OCR à '
+				+ Number(cost.ocrPricePerPage).toFixed(4) + ' $/page (configurable : ocrPricePerPage).'
+			: 'Tokens du connecteur LLM d’extraction uniquement — le passage Mistral OCR (facturé à la page) n’est pas compté ici (tarifs openrouter.ai indisponibles).';
+		usageCard.appendChild(usageNote);
+		body.appendChild(usageCard);
 	}
 
 	// --- CSV export (rebuilt on click so manual corrections are included) ---
