@@ -14,7 +14,9 @@
  * workflow: corrected values are marked, revertible, and flow into the CSV),
  * a "needs review" filter, the VLM vs OCR comparison merged as a status column
  * (divergent rows expand to show both values with the differing segment
- * highlighted), coherence-check results, errors/warnings, and a CSV export
+ * highlighted), coherence-check results, errors/warnings, a token-consumption
+ * card when the comparison ran (Anthropic input/output tokens of the VLM and
+ * OCR-text sides, `data.tokenUsage`), and a CSV export
  * (copy + download; the CSV layout mirrors MagicOCR's "Résultats" sheet: one
  * row per document, `;` separator and UTF-8 BOM for French Excel, plus a
  * trailing "Champs corrigés" column listing manually corrected fields), and a
@@ -989,6 +991,60 @@ function render(data) {
 		}
 		issuesCard.appendChild(list);
 		body.appendChild(issuesCard);
+	}
+
+	// --- Token consumption (compareWithOcr runs: VLM side vs OCR-text side) ---
+	const usage = data.tokenUsage;
+	if (usage && typeof usage === 'object' && (usage.vlm || usage.ocr)) {
+		const usageCard = makeCard('Consommation de tokens (VLM vs OCR)');
+		const utable = document.createElement('table');
+		const uhead = document.createElement('thead');
+		const uheadRow = document.createElement('tr');
+		for (const label of ['Approche', 'Tokens entrée', 'Tokens sortie', 'Total', 'Appels LLM']) {
+			const th = document.createElement('th');
+			th.textContent = label;
+			uheadRow.appendChild(th);
+		}
+		uhead.appendChild(uheadRow);
+		utable.appendChild(uhead);
+		const ubody = document.createElement('tbody');
+		const fmtTokens = (n) => (typeof n === 'number' ? n.toLocaleString('fr-FR') : '—');
+		const addUsageRow = (label, u, isTotal) => {
+			if (!u || typeof u !== 'object') return;
+			const tr = document.createElement('tr');
+			const cells = [
+				label,
+				fmtTokens(u.inputTokens),
+				fmtTokens(u.outputTokens),
+				fmtTokens((u.inputTokens || 0) + (u.outputTokens || 0)),
+				fmtTokens(u.calls)
+			];
+			for (const text of cells) {
+				const td = document.createElement('td');
+				td.textContent = text;
+				if (isTotal) td.style.fontWeight = '600';
+				tr.appendChild(td);
+			}
+			ubody.appendChild(tr);
+		};
+		addUsageRow('Vision (VLM)', usage.vlm, false);
+		addUsageRow('Texte (OCR)', usage.ocr, false);
+		if (usage.vlm && usage.ocr) {
+			addUsageRow('Total', {
+				inputTokens: (usage.vlm.inputTokens || 0) + (usage.ocr.inputTokens || 0),
+				outputTokens: (usage.vlm.outputTokens || 0) + (usage.ocr.outputTokens || 0),
+				calls: (usage.vlm.calls || 0) + (usage.ocr.calls || 0)
+			}, true);
+		}
+		utable.appendChild(ubody);
+		usageCard.appendChild(utable);
+		const usageNote = document.createElement('div');
+		usageNote.style.fontSize = '11px';
+		usageNote.style.color = 'var(--muted)';
+		usageNote.style.marginTop = '6px';
+		usageNote.textContent = 'Tokens du connecteur LLM d’extraction uniquement — le passage Mistral OCR (facturé à la page) n’est pas compté.';
+		usageCard.appendChild(usageNote);
+		body.appendChild(usageCard);
 	}
 
 	// --- CSV export (rebuilt on click so manual corrections are included) ---

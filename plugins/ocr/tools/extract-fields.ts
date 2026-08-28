@@ -34,7 +34,8 @@ import {
 	type ExtractionResult,
 	type FieldComparison,
 	type LlmConfig,
-	type TemplateField
+	type TemplateField,
+	type TokenUsage
 } from '../lib/extraction';
 import {
 	batchedMistralOcr,
@@ -134,6 +135,14 @@ const MSG_LLM_ERROR: Record<Locale, string> = {
 	es: 'Error del conector LLM de extracción: {error}. Verifica la configuración del plugin OCR (llmEndpoint/llmApiKey/llmModel) — para Azure AI Foundry basta la URL base https://<recurso>.services.ai.azure.com (la ruta /anthropic/v1/messages se añade automáticamente).',
 	zh: '提取 LLM 连接器错误：{error}。请检查 OCR 插件配置（llmEndpoint/llmApiKey/llmModel）— 对于 Azure AI Foundry，基础 URL https://<资源>.services.ai.azure.com 即可（/anthropic/v1/messages 路由会自动添加）。',
 	de: 'Fehler des Extraktions-LLM-Konnektors: {error}. Prüfe die Konfiguration des OCR-Plugins (llmEndpoint/llmApiKey/llmModel) — für Azure AI Foundry genügt die Basis-URL https://<Ressource>.services.ai.azure.com (die Route /anthropic/v1/messages wird automatisch ergänzt).'
+};
+
+const MSG_TOKEN_USAGE: Record<Locale, string> = {
+	fr: 'Consommation de tokens — vision (VLM) : {vlmIn} entrée / {vlmOut} sortie · texte (OCR) : {ocrIn} entrée / {ocrOut} sortie.',
+	en: 'Token consumption — vision (VLM): {vlmIn} input / {vlmOut} output · text (OCR): {ocrIn} input / {ocrOut} output.',
+	es: 'Consumo de tokens — visión (VLM): {vlmIn} entrada / {vlmOut} salida · texto (OCR): {ocrIn} entrada / {ocrOut} salida.',
+	zh: 'Token 消耗 — 视觉（VLM）：输入 {vlmIn} / 输出 {vlmOut} · 文本（OCR）：输入 {ocrIn} / 输出 {ocrOut}。',
+	de: 'Token-Verbrauch — Vision (VLM): {vlmIn} Eingabe / {vlmOut} Ausgabe · Text (OCR): {ocrIn} Eingabe / {ocrOut} Ausgabe.'
 };
 
 const MSG_COMPARE_FAILED: Record<Locale, string> = {
@@ -413,6 +422,8 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 
 			let result: ExtractionResult;
 			let comparison: FieldComparison[] | null = null;
+			/** Per-side Anthropic token consumption of the comparison, for the panel. */
+			let tokenUsage: { vlm?: TokenUsage; ocr?: TokenUsage } | null = null;
 			let compareNotice = '';
 			/** OCR pages from the compareWithOcr pass, reused for the stored panel payload. */
 			let ocrPagesForStore: OcrPage[] | null = null;
@@ -482,6 +493,12 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 								const compared = compareExtractions(vlmResult, ocrResult, fields);
 								result = compared.result;
 								comparison = compared.comparison;
+								if (vlmResult.usage || ocrResult.usage) {
+									tokenUsage = {
+										...(vlmResult.usage ? { vlm: vlmResult.usage } : {}),
+										...(ocrResult.usage ? { ocr: ocrResult.usage } : {})
+									};
+								}
 							}
 						} catch (error) {
 							compareNotice = `\n${msg(MSG_COMPARE_FAILED, locale, {
@@ -534,6 +551,14 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				? `\n${msg(MSG_COMPARE_DONE, locale, {
 						agree: comparison.filter((c) => c.agree).length,
 						disagree: comparison.filter((c) => !c.agree).length
+					})}`
+				: '';
+			const tokenSummary = tokenUsage
+				? `\n${msg(MSG_TOKEN_USAGE, locale, {
+						vlmIn: tokenUsage.vlm?.inputTokens ?? 0,
+						vlmOut: tokenUsage.vlm?.outputTokens ?? 0,
+						ocrIn: tokenUsage.ocr?.inputTokens ?? 0,
+						ocrOut: tokenUsage.ocr?.outputTokens ?? 0
 					})}`
 				: '';
 			const stubNotice = isStub ? `\n\n${msg(MSG_STUB_NOTICE, locale)}` : '';
@@ -604,7 +629,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			// to the short summary. The result JSON goes in `content`, which reaches
 			// the model via toModelOutput (and via the serialized replay on later turns).
 			return {
-				message: `${summary}${compareSummary}${compareNotice}${stubNotice}`,
+				message: `${summary}${compareSummary}${tokenSummary}${compareNotice}${stubNotice}`,
 				content: truncated,
 				data: {
 					...(docId ? { docId } : {}),
@@ -615,7 +640,8 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					status,
 					templateFields: fields,
 					result,
-					...(comparison ? { comparison } : {})
+					...(comparison ? { comparison } : {}),
+					...(tokenUsage ? { tokenUsage } : {})
 				},
 				_meta: {
 					ui: {
