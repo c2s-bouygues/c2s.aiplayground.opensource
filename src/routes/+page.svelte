@@ -269,7 +269,9 @@
 							{selectedPlugin.author}
 						</span>
 						{#if selectedPlugin.category}
-							<span class="px-2 py-0.5 bg-secondary text-secondary-foreground rounded-md text-xs">
+							<span
+								class="px-2 py-0.5 bg-secondary text-secondary-foreground rounded-md text-xs capitalize"
+							>
 								{selectedPlugin.category}
 							</span>
 						{/if}

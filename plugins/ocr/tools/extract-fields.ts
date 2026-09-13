@@ -27,24 +27,47 @@ import {
 	extractFromDocument,
 	extractFromText,
 	extractWithDoubleValidation,
+	mergeBatchResults,
 	stubExtraction,
+	verifyFieldSources,
 	type CoherenceCheck,
 	type ExtractionResult,
 	type FieldComparison,
 	type LlmConfig,
-	type TemplateField
+	type TemplateField,
+	type TokenUsage
 } from '../lib/extraction';
-import { mistralOcr, resolveOcrConnector } from '../lib/mistral-ocr';
-import { buildMarkdown } from '../lib/result-store';
+import {
+	batchedMistralOcr,
+	mistralOcr,
+	parseTooManyPages,
+	resolveOcrConnector,
+	DEFAULT_PAGE_LIMIT
+} from '../lib/mistral-ocr';
+import {
+	buildMarkdown,
+	saveOcrResult,
+	type OcrPage,
+	type StoredOcrResult
+} from '../lib/result-store';
+import { estimateComparisonCost, type ComparisonCost } from '../lib/pricing';
 
 const EXTRACTION_ICON = 'hugeicons:document-validation';
 const EXTRACTION_PREFERRED_WIDTH = 640;
 
 /** The model needs the extracted values to answer, but keep the payload bounded. */
-const MAX_MESSAGE_JSON_CHARS = 6_000;
+const MAX_CONTENT_JSON_CHARS = 6_000;
 
 /** Anthropic inline limits are ~5MB/image and 32MB/request — guard well below. */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Embed the original document in the stored panel payload up to this size, so
+ * the extraction viewer's side-by-side preview can render the real PDF pages
+ * (pdf.js) or the image. Beyond it the preview is simply unavailable. Aligned
+ * with ocr_extract's cap (same storage/bridge path, never in the LLM prompt).
+ */
+const FILE_EMBED_MAX_BYTES = 20 * 1024 * 1024;
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
@@ -115,6 +138,22 @@ const MSG_LLM_ERROR: Record<Locale, string> = {
 	de: 'Fehler des Extraktions-LLM-Konnektors: {error}. Prüfe die Konfiguration des OCR-Plugins (llmEndpoint/llmApiKey/llmModel) — für Azure AI Foundry genügt die Basis-URL https://<Ressource>.services.ai.azure.com (die Route /anthropic/v1/messages wird automatisch ergänzt).'
 };
 
+const MSG_TOKEN_USAGE: Record<Locale, string> = {
+	fr: 'Consommation de tokens — vision (VLM) : {vlmIn} entrée / {vlmOut} sortie · texte (OCR) : {ocrIn} entrée / {ocrOut} sortie.',
+	en: 'Token consumption — vision (VLM): {vlmIn} input / {vlmOut} output · text (OCR): {ocrIn} input / {ocrOut} output.',
+	es: 'Consumo de tokens — visión (VLM): {vlmIn} entrada / {vlmOut} salida · texto (OCR): {ocrIn} entrada / {ocrOut} salida.',
+	zh: 'Token 消耗 — 视觉（VLM）：输入 {vlmIn} / 输出 {vlmOut} · 文本（OCR）：输入 {ocrIn} / 输出 {ocrOut}。',
+	de: 'Token-Verbrauch — Vision (VLM): {vlmIn} Eingabe / {vlmOut} Ausgabe · Text (OCR): {ocrIn} Eingabe / {ocrOut} Ausgabe.'
+};
+
+const MSG_COST_SUMMARY: Record<Locale, string> = {
+	fr: 'Coût estimé — approche vision (VLM) : {vlm} · approche texte (Mistral OCR {pages} page(s) + LLM) : {ocr} (tarifs tokens openrouter.ai).',
+	en: 'Estimated cost — vision approach (VLM): {vlm} · text approach (Mistral OCR {pages} page(s) + LLM): {ocr} (token prices from openrouter.ai).',
+	es: 'Coste estimado — enfoque visión (VLM): {vlm} · enfoque texto (Mistral OCR {pages} página(s) + LLM): {ocr} (precios de tokens de openrouter.ai).',
+	zh: '估算成本 — 视觉方案（VLM）：{vlm} · 文本方案（Mistral OCR {pages} 页 + LLM）：{ocr}（token 价格来自 openrouter.ai）。',
+	de: 'Geschätzte Kosten — Vision-Ansatz (VLM): {vlm} · Text-Ansatz (Mistral OCR {pages} Seite(n) + LLM): {ocr} (Token-Preise von openrouter.ai).'
+};
+
 const MSG_COMPARE_FAILED: Record<Locale, string> = {
 	fr: 'Comparaison VLM/OCR impossible ({error}) — extraction vision seule.',
 	en: 'VLM/OCR comparison failed ({error}) — vision-only extraction.',
@@ -151,6 +190,8 @@ interface OcrPluginConfig {
 	endpoint?: string;
 	apiKey?: string;
 	ocrModel?: string;
+	/** Mistral OCR price in USD per page (page-billed, not on OpenRouter) — cost card. */
+	ocrPricePerPage?: number;
 }
 
 interface ExtractFieldsParams {
@@ -215,6 +256,60 @@ function sanitizeFields(raw: ExtractFieldsParams['fields']): TemplateField[] {
 		}));
 }
 
+/**
+ * Above this many fields the extraction is split into internal batches (one
+ * LLM call each) and merged: a single oversized call gets its JSON answer cut
+ * by max_tokens (observed around ~100 fields). Coherence checks ride with the
+ * first batch only — the model sees the WHOLE document on every call, so they
+ * stay meaningful there without being paid on each batch.
+ */
+const FIELDS_PER_CALL = 25;
+
+function chunkFields(fields: TemplateField[]): TemplateField[][] {
+	const out: TemplateField[][] = [];
+	for (let i = 0; i < fields.length; i += FIELDS_PER_CALL) {
+		out.push(fields.slice(i, i + FIELDS_PER_CALL));
+	}
+	return out;
+}
+
+/** Vision extraction, batched over the field list (sequential — full document each call). */
+async function runVisionExtraction(
+	llm: LlmConfig,
+	block: NonNullable<ReturnType<typeof buildDocumentBlock>>,
+	fields: TemplateField[],
+	coherenceChecks: CoherenceCheck[],
+	doubleExtraction: boolean
+): Promise<ExtractionResult> {
+	const run = (f: TemplateField[], c: CoherenceCheck[]) =>
+		doubleExtraction
+			? extractWithDoubleValidation(llm, block, f, c)
+			: extractFromDocument(llm, block, f, c);
+	const batches = chunkFields(fields);
+	if (batches.length === 1) return run(fields, coherenceChecks);
+	const results: ExtractionResult[] = [];
+	for (const [i, batch] of batches.entries()) {
+		results.push(await run(batch, i === 0 ? coherenceChecks : []));
+	}
+	return mergeBatchResults(results);
+}
+
+/** Text-side extraction (compareWithOcr), batched the same way. */
+async function runTextExtraction(
+	llm: LlmConfig,
+	documentText: string,
+	fields: TemplateField[],
+	coherenceChecks: CoherenceCheck[]
+): Promise<ExtractionResult> {
+	const batches = chunkFields(fields);
+	if (batches.length === 1) return extractFromText(llm, documentText, fields, coherenceChecks);
+	const results: ExtractionResult[] = [];
+	for (const [i, batch] of batches.entries()) {
+		results.push(await extractFromText(llm, documentText, batch, i === 0 ? coherenceChecks : []));
+	}
+	return mergeBatchResults(results);
+}
+
 function sanitizeChecks(raw: ExtractFieldsParams['coherenceChecks']): CoherenceCheck[] {
 	if (!Array.isArray(raw)) return [];
 	return raw
@@ -247,7 +342,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				fields: {
 					type: 'array',
 					description:
-						"Champs à extraire, construits d'après la demande de l'utilisateur (équivalent d'un template MagicOCR)",
+						"Champs à extraire, construits d'après la demande de l'utilisateur (équivalent d'un template MagicOCR). Pour des éléments répétés (liste d'exigences, lignes de facture…), fournir UN champ par élément nommé par son identifiant réel — jamais un unique champ agrégé. Les grandes listes sont acceptées en UN SEUL appel : l'outil découpe lui-même en lots internes",
 					items: {
 						type: 'object',
 						properties: {
@@ -296,6 +391,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			params
 		): Promise<{
 			message: string;
+			content?: string;
 			data?: Record<string, unknown>;
 			_meta?: Record<string, unknown>;
 		}> => {
@@ -337,13 +433,15 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 
 			let result: ExtractionResult;
 			let comparison: FieldComparison[] | null = null;
+			/** Per-side Anthropic token consumption of the comparison, for the panel. */
+			let tokenUsage: { vlm?: TokenUsage; ocr?: TokenUsage } | null = null;
 			let compareNotice = '';
+			/** OCR pages from the compareWithOcr pass, reused for the stored panel payload. */
+			let ocrPagesForStore: OcrPage[] | null = null;
 			if (llm === null) {
 				result = stubExtraction(fields, coherenceChecks);
 			} else {
-				const vlmPromise = doubleExtraction
-					? extractWithDoubleValidation(llm, block, fields, coherenceChecks)
-					: extractFromDocument(llm, block, fields, coherenceChecks);
+				const vlmPromise = runVisionExtraction(llm, block, fields, coherenceChecks, doubleExtraction);
 				if (!compareWithOcr) {
 					result = await vlmPromise;
 				} else {
@@ -355,17 +453,44 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 						result = await vlmPromise;
 					} else {
 						try {
-							const ocrPages = await mistralOcr(
-								connector,
-								file.buffer,
-								file.contentType,
-								file.fileName,
-								{ cropBudget: { remaining: 0 } }
-							);
+							let ocrPages: OcrPage[];
+							try {
+								ocrPages = await mistralOcr(
+									connector,
+									file.buffer,
+									file.contentType,
+									file.fileName,
+									{ cropBudget: { remaining: 0 } }
+								);
+							} catch (ocrError) {
+								// Same batching principle as ocr_extract: documents over the
+								// per-request page limit are split into image sub-PDFs. No
+								// extra user confirmation here — asking for compareWithOcr IS
+								// the consent for the heavier OCR pass.
+								const ocrErrorText =
+									ocrError instanceof Error ? ocrError.message : String(ocrError);
+								const tooMany = parseTooManyPages(ocrErrorText);
+								if (!tooMany) throw ocrError;
+								const batchSize = Math.max(1, tooMany.maxPages || DEFAULT_PAGE_LIMIT);
+								logger.info('compareWithOcr: batched OCR fallback', {
+									fileName: file.fileName,
+									totalPages: tooMany.totalPages,
+									batchSize
+								});
+								const batched = await batchedMistralOcr(
+									connector,
+									file.buffer,
+									file.fileName,
+									batchSize,
+									{ cropBudget: { remaining: 0 } }
+								);
+								ocrPages = batched.pages;
+							}
+							ocrPagesForStore = ocrPages;
 							const ocrText = buildMarkdown(ocrPages);
 							const [vlmResult, ocrResult] = await Promise.all([
 								vlmPromise,
-								extractFromText(llm, ocrText, fields, coherenceChecks)
+								runTextExtraction(llm, ocrText, fields, coherenceChecks)
 							]);
 							// A technically failed extraction has no data: comparing it would
 							// fabricate "agreements" between empty results — degrade instead.
@@ -379,6 +504,12 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 								const compared = compareExtractions(vlmResult, ocrResult, fields);
 								result = compared.result;
 								comparison = compared.comparison;
+								if (vlmResult.usage || ocrResult.usage) {
+									tokenUsage = {
+										...(vlmResult.usage ? { vlm: vlmResult.usage } : {}),
+										...(ocrResult.usage ? { ocr: ocrResult.usage } : {})
+									};
+								}
 							}
 						} catch (error) {
 							compareNotice = `\n${msg(MSG_COMPARE_FAILED, locale, {
@@ -389,6 +520,24 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					}
 				}
 			}
+
+			// Cost estimate of the comparison (token prices from OpenRouter, Mistral
+			// OCR per page): best-effort — null leaves the panel with tokens only.
+			const ocrPageCount = ocrPagesForStore?.length ?? 0;
+			let costEstimate: ComparisonCost | null = null;
+			if (tokenUsage && llm) {
+				costEstimate = await estimateComparisonCost(
+					llm.model,
+					tokenUsage,
+					ocrPageCount,
+					config.ocrPricePerPage
+				);
+			}
+
+			// Provenance audit: when the compareWithOcr pass produced OCR text, check
+			// the model-reported quotes against it (verified/unverified flag on each
+			// source — soft signal for the panel, confidences untouched).
+			if (ocrPagesForStore) verifyFieldSources(result, ocrPagesForStore);
 
 			// LLM connector down (transport/parse failure on every attempt): no data
 			// at all — report the error plainly instead of a 0%-confidence table.
@@ -409,9 +558,11 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					? 'error'
 					: 'success';
 
+			const fieldBatches = Math.ceil(fields.length / FIELDS_PER_CALL);
 			const modeParts = [
 				doubleExtraction ? 'double extraction' : 'simple',
-				...(comparison ? ['comparaison VLM/OCR'] : [])
+				...(comparison ? ['comparaison VLM/OCR'] : []),
+				...(fieldBatches > 1 ? [`${fieldBatches} lots de champs`] : [])
 			];
 			const summary = msg(MSG_DONE, locale, {
 				count: fields.length,
@@ -426,6 +577,22 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 						disagree: comparison.filter((c) => !c.agree).length
 					})}`
 				: '';
+			const tokenSummary = tokenUsage
+				? `\n${msg(MSG_TOKEN_USAGE, locale, {
+						vlmIn: tokenUsage.vlm?.inputTokens ?? 0,
+						vlmOut: tokenUsage.vlm?.outputTokens ?? 0,
+						ocrIn: tokenUsage.ocr?.inputTokens ?? 0,
+						ocrOut: tokenUsage.ocr?.outputTokens ?? 0
+					})}`
+				: '';
+			const fmtUsd = (n: number) => `$${n.toFixed(4)}`;
+			const costSummary = costEstimate
+				? `\n${msg(MSG_COST_SUMMARY, locale, {
+						vlm: fmtUsd(costEstimate.vlmTotalUsd),
+						ocr: fmtUsd(costEstimate.ocrTotalUsd),
+						pages: ocrPageCount
+					})}`
+				: '';
 			const stubNotice = isStub ? `\n\n${msg(MSG_STUB_NOTICE, locale)}` : '';
 
 			const resultJson = JSON.stringify(
@@ -434,6 +601,7 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					fields: result.fields,
 					confidence: result.confidence,
 					fieldConfidences: result.fieldConfidences,
+					...(result.fieldSources ? { fieldSources: result.fieldSources } : {}),
 					errors: result.errors,
 					warnings: result.warnings,
 					coherenceCheckResults: result.coherenceCheckResults
@@ -442,9 +610,42 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				2
 			);
 			const truncated =
-				resultJson.length > MAX_MESSAGE_JSON_CHARS
-					? `${resultJson.slice(0, MAX_MESSAGE_JSON_CHARS)}\n[…résultat tronqué]`
+				resultJson.length > MAX_CONTENT_JSON_CHARS
+					? `${resultJson.slice(0, MAX_CONTENT_JSON_CHARS)}\n[…résultat tronqué]`
 					: resultJson;
+
+			// Side-by-side document preview: persist the original file (and the OCR
+			// pages when compareWithOcr ran) in the plugin's result store; the panel
+			// fetches it via ocr_get_result through the MCP Apps bridge (never
+			// persisted in the chat), so only the small `docId` rides in `data`.
+			const embedMediaType = (file.contentType || '').split(';')[0].trim().toLowerCase();
+			const embeddable =
+				file.buffer.length <= FILE_EMBED_MAX_BYTES &&
+				(embedMediaType === 'application/pdf' || embedMediaType.startsWith('image/'));
+			let docId: string | null = null;
+			if (embeddable || ocrPagesForStore) {
+				const storePayload: StoredOcrResult = {
+					fileName: file.fileName,
+					contentType: file.contentType,
+					provider,
+					pages: ocrPagesForStore ?? [],
+					...(embeddable
+						? {
+								document: {
+									mediaType: embedMediaType,
+									dataUri: `data:${embedMediaType};base64,${file.buffer.toString('base64')}`
+								}
+							}
+						: {})
+				};
+				try {
+					docId = (await saveOcrResult(context.storage, storePayload)).docId;
+				} catch (error) {
+					logger.warn('extract_fields: result store failed — no document preview', {
+						error: error instanceof Error ? error.message : String(error)
+					});
+				}
+			}
 
 			logger.info('Field extraction done', {
 				fileName: file.fileName,
@@ -452,12 +653,18 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 				confidence: result.confidence,
 				status,
 				doubleExtraction,
-				provider
+				provider,
+				docId
 			});
 
+			// `message` is the ONLY field the host UI renders in the tool step — keep it
+			// to the short summary. The result JSON goes in `content`, which reaches
+			// the model via toModelOutput (and via the serialized replay on later turns).
 			return {
-				message: `${summary}${compareSummary}${compareNotice}${stubNotice}\n\n---\n${truncated}`,
+				message: `${summary}${compareSummary}${tokenSummary}${costSummary}${compareNotice}${stubNotice}`,
+				content: truncated,
 				data: {
+					...(docId ? { docId } : {}),
 					fileName: file.fileName,
 					contentType: file.contentType,
 					provider,
@@ -465,7 +672,9 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 					status,
 					templateFields: fields,
 					result,
-					...(comparison ? { comparison } : {})
+					...(comparison ? { comparison } : {}),
+					...(tokenUsage ? { tokenUsage: { ...tokenUsage, ocrPageCount } } : {}),
+					...(costEstimate ? { costEstimate } : {})
 				},
 				_meta: {
 					ui: {
@@ -478,10 +687,13 @@ export function createExtractFieldsTool(context: PluginContext): AnyTool {
 			};
 		},
 		// The host serializes the FULL output to the model by default — expose
-		// `message` only (it already carries the result JSON, bounded).
-		toModelOutput: ({ output }) => ({
-			type: 'text' as const,
-			value: (output as { message: string }).message
-		})
+		// `message` + `content` (the bounded result JSON) only.
+		toModelOutput: ({ output }) => {
+			const o = output as { message: string; content?: string };
+			return {
+				type: 'text' as const,
+				value: o.content ? `${o.message}\n\n---\n${o.content}` : o.message
+			};
+		}
 	});
 }

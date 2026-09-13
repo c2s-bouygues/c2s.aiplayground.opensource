@@ -91,7 +91,7 @@ export function createReadTextTool(context: PluginContext): AnyTool {
 		}),
 		execute: async (
 			params
-		): Promise<{ message: string; data?: Record<string, unknown> }> => {
+		): Promise<{ message: string; content?: string; data?: Record<string, unknown> }> => {
 			let text: string;
 			let docId: string;
 			try {
@@ -116,9 +116,20 @@ export function createReadTextTool(context: PluginContext): AnyTool {
 			const header = msg(MSG_CHUNK, locale, { docId, start: offset, end, total });
 			const footer = nextOffset !== null ? msg(MSG_NEXT, locale, { next: nextOffset }) : msg(MSG_END, locale);
 
+			// `message` is the ONLY field the host UI renders in the tool step — keep it
+			// to the short header. The text chunk goes in `content` (model-only via
+			// toModelOutput; replayed with the serialized output on later turns).
 			return {
-				message: `${header}\n\n---\n${text.slice(offset, end)}\n---\n${footer}`,
+				message: header,
+				content: `${text.slice(offset, end)}\n---\n${footer}`,
 				data: { docId, offset, next_offset: nextOffset, total_chars: total }
+			};
+		},
+		toModelOutput: ({ output }) => {
+			const o = output as { message: string; content?: string };
+			return {
+				type: 'text' as const,
+				value: o.content ? `${o.message}\n\n---\n${o.content}` : o.message
 			};
 		}
 	});
