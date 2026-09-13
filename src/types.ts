@@ -76,6 +76,12 @@ export interface ToolContext {
 	userEmail?: string | null;
 	toolOptions?: Record<string, string>;
 	locale?: Locale;
+	/**
+	 * AI provider ids the current user may use (from AuthContext.accessibleProviders).
+	 * Lets tools offer a provider choice to the LLM (e.g. the sandpack AI bridge).
+	 * Absent = unknown in this context; tools must degrade to a free-form field.
+	 */
+	accessibleProviders?: string[];
 	// Note: the core ToolContext also carries `alwaysApproveToolNames?: Set<string>`.
 	// It is intentionally omitted here — it's a core approval-orchestration concern
 	// (decides `needsApproval` wrapping), not part of the plugin contract.
@@ -220,6 +226,12 @@ export interface PluginManifest {
 	optionalEnvVars?: string[];
 	configSchema?: ToolConfigSchema;
 	tools: PluginToolDeclaration[];
+	/**
+	 * Build the plugin into the registry without listing it in ENABLED_PLUGINS.
+	 * Tools stay hidden when required env vars are missing, so a default-on plugin
+	 * whose backend is absent costs nothing. Opt out with DISABLED_PLUGINS.
+	 */
+	defaultEnabled?: boolean;
 	/** Whether this plugin discovers tools dynamically at runtime (allows empty tools array) */
 	dynamicTools?: boolean;
 	/**
@@ -244,6 +256,7 @@ export interface PluginToolDefinition {
 
 /**
  * OAuth handlers a plugin can declare to enable the generic per-user OAuth flow.
+ * Routes under /api/plugins/[pluginId]/oauth/* will call these hooks.
  */
 export interface PluginOAuthHandlers {
 	/**
