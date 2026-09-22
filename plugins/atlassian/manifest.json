@@ -1,0 +1,126 @@
+{
+  "id": "atlassian",
+  "name": "Atlassian MCP",
+  "version": "1.0.0",
+  "description": "Dynamically discovers and exposes the tools of the official Atlassian MCP Server (Jira, Confluence, Jira Service Management, Bitbucket, Compass, Loom, Teamwork Graph). Authentication is either per-user OAuth 2.1 (PKCE, dynamic client registration) or a headless API token / service-account key configured by the admin. Tools are discovered on demand (admin Connect + Refresh) and execute as the calling user.",
+  "dynamicTools": true,
+  "skipRefreshOnRestart": true,
+  "author": "AI Playground",
+  "license": "MIT",
+  "icon": "simple-icons:atlassian",
+  "category": "productivity",
+  "homepage": "https://github.com/atlassian/atlassian-mcp-server",
+  "requiredEnvVars": [],
+  "optionalEnvVars": ["ATLASSIAN_API_TOKEN", "ATLASSIAN_API_TOKEN_EMAIL"],
+  "configSchema": {
+    "type": "object",
+    "title": "Atlassian MCP Configuration",
+    "properties": {
+      "mcpUrl": {
+        "type": "string",
+        "title": "MCP Server URL",
+        "description": "Streamable HTTP endpoint of the Atlassian MCP Server. Default: https://mcp.atlassian.com/v2/mcp",
+        "default": "https://mcp.atlassian.com/v2/mcp",
+        "x-ui-order": 1
+      },
+      "exposeAllTools": {
+        "type": "boolean",
+        "title": "Expose all tools (?tools=all)",
+        "description": "By default Atlassian exposes a small set of primary tools plus discover/execute meta-tools. Enable to fetch the full flat tool list (recommended for this plugin so every tool is registered individually).",
+        "default": true,
+        "x-ui-order": 2
+      },
+      "authMode": {
+        "type": "string",
+        "title": "Authentication mode",
+        "description": "oauth: each user connects with their own Atlassian account (OAuth 2.1 + PKCE). api_token: a single headless credential (personal API token or service-account key) is used for every call — required for Jira Service Management tools.",
+        "enum": ["oauth", "api_token"],
+        "enumLabels": { "oauth": "OAuth 2.1 (per user)", "api_token": "API token (headless, shared)" },
+        "default": "oauth",
+        "x-ui-widget": "select",
+        "x-ui-order": 3
+      },
+      "oauthClientId": {
+        "type": "string",
+        "title": "OAuth Client ID",
+        "description": "Client ID obtained by dynamic client registration on https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register (the authorization server of the v2 MCP resource). Do NOT use an app from developer.atlassian.com (3LO apps are not accepted by the MCP authorization server). Leave empty to let the plugin register a client automatically (in-memory: users must reconnect after a restart — persist the logged client_id here once known). An org admin must allowlist this playground's redirect URL under Atlassian Administration → Rovo → Rovo MCP server → Domain settings.",
+        "x-ui-group": "OAuth",
+        "x-ui-order": 10
+      },
+      "oauthClientSecret": {
+        "type": "string",
+        "title": "OAuth Client Secret",
+        "description": "Only for confidential clients. Leave empty for public (PKCE-only) clients such as those obtained via dynamic registration.",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "OAuth",
+        "x-ui-order": 11
+      },
+      "oauthScope": {
+        "type": "string",
+        "title": "OAuth Scopes",
+        "description": "Space-separated scopes requested at authorization. Default covers Jira + Confluence read/write/search plus Rovo search. See https://mcp.atlassian.com/.well-known/oauth-protected-resource/v2/mcp for the full list.",
+        "default": "offline_access read:me read:jira:agent-interface write:jira:agent-interface search:jira:agent-interface read:confluence:agent-interface write:confluence:agent-interface search:confluence:agent-interface search:rovo:agent-interface",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "OAuth",
+        "x-ui-order": 12
+      },
+      "oauthAuthorizeUrl": {
+        "type": "string",
+        "title": "OAuth Authorize URL",
+        "description": "Default: https://auth.atlassian.com/authorize (authorization server of https://mcp.atlassian.com/v2/mcp). The legacy https://mcp.atlassian.com/v1/authorize issues tokens the v2 resource rejects.",
+        "x-ui-group": "OAuth",
+        "x-ui-order": 13
+      },
+      "oauthTokenUrl": {
+        "type": "string",
+        "title": "OAuth Token URL",
+        "description": "Default: https://auth.atlassian.com/oauth/token",
+        "x-ui-group": "OAuth",
+        "x-ui-order": 14
+      },
+      "oauthRegistrationUrl": {
+        "type": "string",
+        "title": "OAuth Dynamic Registration URL",
+        "description": "Default: https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register",
+        "x-ui-group": "OAuth",
+        "x-ui-order": 15
+      },
+      "apiTokenEmail": {
+        "type": "string",
+        "title": "API token e-mail",
+        "description": "Atlassian account e-mail paired with a personal API token (Basic auth). Leave empty when using a service-account API key (Bearer). Falls back to env ATLASSIAN_API_TOKEN_EMAIL.",
+        "x-ui-group": "API token",
+        "x-ui-order": 20
+      },
+      "apiToken": {
+        "type": "string",
+        "title": "API token / service-account key",
+        "description": "Personal API token (with e-mail above) or service-account API key. Falls back to env ATLASSIAN_API_TOKEN. An org admin must enable API-token auth for the MCP server.",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "API token",
+        "x-ui-order": 21
+      },
+      "defaultCloudId": {
+        "type": "string",
+        "title": "Default cloudId / site URL",
+        "description": "Atlassian site to target by default, e.g. https://yoursite.atlassian.net (or the cloudId UUID). Injected automatically into tools that accept a cloudId when the LLM omits it — avoids an extra discovery call.",
+        "x-ui-order": 30
+      },
+      "timeoutSeconds": {
+        "type": "number",
+        "title": "Timeout (seconds)",
+        "description": "Maximum time for a single MCP call.",
+        "default": 60,
+        "minimum": 5,
+        "maximum": 600,
+        "x-ui-order": 31
+      }
+    },
+    "required": []
+  },
+  "tools": [],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}
