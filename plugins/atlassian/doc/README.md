@@ -45,12 +45,12 @@ protocole explicite. Le chemin de callback est imposé par l'hôte :
 {origine}/api/plugins/atlassian/oauth/callback
 ```
 
-Entrées à ajouter dans *Domain settings* → *Add domain* (motif `/**` accepté) :
+Entrées à ajouter dans *Domain settings* → *Add domain* (motif `/**` accepté), une par
+origine publique du playground, par exemple :
 
 ```
-https://intelligenttalk.bouygues-construction.com/**
-https://beta.intelligenttalk.bouygues-construction.com/**
-https://italk.bouygues-construction.com/**
+https://playground.example.com/**
+https://beta.playground.example.com/**
 ```
 
 Le dev local en `https://localhost:5173` n'est **pas** couvert par la règle localhost
@@ -84,7 +84,7 @@ propagé au service d'enforcement — cf. KB Atlassian).
 | OAuth Token URL | *(vide)* → `https://auth.atlassian.com/oauth/token` | |
 | OAuth Registration URL | *(vide)* → `https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register` | Serveur d'autorisation annoncé par la ressource v2 |
 | API token e-mail / key | vide en mode `oauth` | Repli env `ATLASSIAN_API_TOKEN_EMAIL` / `ATLASSIAN_API_TOKEN` |
-| Default cloudId / site URL | `cloudId` du site | Récupérer sur `https://bouygues-construction.atlassian.net/_edge/tenant_info` |
+| Default cloudId / site URL | `cloudId` du site | Récupérer sur `https://<site>.atlassian.net/_edge/tenant_info` |
 | Timeout | 60 s | |
 
 Les endpoints OAuth par défaut proviennent de
@@ -124,7 +124,7 @@ dans Jira/Confluence.
    Coller ce `client_id` dans **OAuth Client ID**. Sans cela, le client vit en mémoire :
    après un redémarrage les refresh tokens échouent et les utilisateurs doivent se reconnecter.
    Le client est lié à la redirect URI → **un `client_id` distinct par environnement**
-   (prod, beta, italk, dev).
+   (prod, beta, dev).
 4. L'admin lance **Refresh tools** (`/api/admin/plugins/atlassian/refresh`). Les outils
    découverts sont enregistrés et rehydratés au redémarrage (`skipRefreshOnRestart`).
 5. Chaque utilisateur se connecte à son tour ; ses appels utilisent son propre jeton.
