@@ -60,7 +60,25 @@ Si l'erreur persiste après ajout : supprimer l'entrée, la ré-ajouter à l'ide
 enregistrer, réessayer en navigation privée (le réglage peut être affiché sans être
 propagé au service d'enforcement — cf. KB Atlassian).
 
-### 1.3 Ce qu'il ne faut PAS faire
+> **Problème connu (septembre 2026).** Sur certaines organisations, la liste « Vos domaines »
+> n'est pas appliquée par le serveur d'autorisation : le consentement affiche
+> *« Access to this domain is restricted. Your admin has blocked this domain … »* pour un domaine
+> pourtant listé sous toutes les formes documentées, alors que les domaines pris en charge par
+> Atlassian (`localhost`, `claude.ai`…) passent. Le problème est indépendant du client OAuth, de la
+> ressource (`v2/mcp` ou `v1/mcp/authv2`) et du format du motif.
+> Suivi : [atlassian/atlassian-mcp-server#254](https://github.com/atlassian/atlassian-mcp-server/issues/254).
+> Contournement en attendant : développer/valider en `http://localhost:*/**`, ou activer
+> l'*Enterprise-managed authentication* (§1.3) si l'IdP le permet.
+
+### 1.3 Enterprise-managed authentication (beta)
+
+Onglet *Authentification* → « Allow enterprise managed authentication ». L'autorisation MCP passe
+alors par l'IdP de l'organisation (Cross App Access / XAA : assertion d'identité échangée au token
+endpoint Atlassian) et **la liste de domaines ne s'applique plus**. Prérequis : un IdP compatible
+(documenté par Atlassian pour Okta uniquement) et un mode d'authentification dédié dans le plugin,
+non implémenté à ce jour.
+
+### 1.4 Ce qu'il ne faut PAS faire
 
 - **Ne pas créer d'app OAuth 2.0 (3LO) dans `developer.atlassian.com`.** Le serveur MCP a son
   propre serveur d'autorisation et n'accepte pas ces `client_id`. Le plugin enregistre son
@@ -151,6 +169,7 @@ Requis pour les outils **Jira Service Management** et pour les usages sans utili
 | `401 … invalid_token` | Jeton émis par l'ancien serveur `mcp.atlassian.com/v1/*`, ou jeton sans `resource` | Vider les URL OAuth surchargées et *OAuth Client ID*, déconnecter/reconnecter |
 | Consentement OK puis `invalid_request / Incorrect request parameters` | Redirect URL absente de *Domain settings* (ou `https://localhost`) | §1.2 |
 | « Your organization admin must authorize access from this redirect URL » | Idem, variante affichée sur le consentement | §1.2 |
+| « Access to this domain is restricted / Your admin has blocked this domain » alors que le domaine est listé | Liste « Vos domaines » non appliquée côté Atlassian | Problème connu, voir §1.2 et [issue #254](https://github.com/atlassian/atlassian-mcp-server/issues/254) |
 | Aucun site proposé sur le consentement | MCP non activé pour l'org ou pas de licence Jira/Confluence | §1.1 |
 | Refresh échoue après redémarrage | Client DCR perdu (mémoire) | Renseigner *OAuth Client ID* (§3) |
 | `429` | Quota Atlassian | Le message indique `retry-after` |
