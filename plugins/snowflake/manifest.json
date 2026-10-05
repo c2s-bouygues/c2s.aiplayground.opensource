@@ -1,8 +1,8 @@
 {
   "id": "snowflake",
   "name": "Snowflake MCP",
-  "version": "2.0.0",
-  "description": "Dynamically discovers and exposes the tools of one or more Snowflake Cortex Agents MCP servers (JSON-RPC 2.0 over HTTP). All MCP servers share a single Snowflake account and OAuth integration; the `servers[]` array lists the individual MCP endpoints (database/schema/mcp_server) to expose. Tools are discovered on demand (admin Connect + Refresh) and execute per-user.",
+  "version": "2.1.0",
+  "description": "Dynamically discovers and exposes the tools of one or more Snowflake Cortex Agents MCP servers (JSON-RPC 2.0 over HTTP). All MCP servers share a single Snowflake account and OAuth integration; the `servers[]` array lists the individual MCP endpoints (database/schema/mcp_server) to expose. Tools are discovered on demand (admin Connect + Refresh) and execute per-user via OAuth by default, or with a Programmatic Access Token (PAT) when one is set on the server (`servers[].pat`) or account-wide (`snowflakePat`).",
   "dynamicTools": true,
   "skipRefreshOnRestart": true,
   "author": "AI Playground",
@@ -34,12 +34,18 @@
       "oauthClientId": {
         "type": "string",
         "title": "OAuth Client ID",
-        "description": "OAUTH_CLIENT_ID from SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('<integration_name>')."
+        "description": "OAUTH_CLIENT_ID from SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('<integration_name>'). Required unless every enabled server uses a PAT."
       },
       "oauthClientSecret": {
         "type": "string",
         "title": "OAuth Client Secret",
-        "description": "OAUTH_CLIENT_SECRET (or OAUTH_CLIENT_SECRET_2) from SYSTEM$SHOW_OAUTH_CLIENT_SECRETS.",
+        "description": "OAUTH_CLIENT_SECRET (or OAUTH_CLIENT_SECRET_2) from SYSTEM$SHOW_OAUTH_CLIENT_SECRETS. Required unless every enabled server uses a PAT.",
+        "x-ui-widget": "textarea"
+      },
+      "snowflakePat": {
+        "type": "string",
+        "title": "Programmatic Access Token (PAT)",
+        "description": "Optional. Account-wide Snowflake PAT used by every server without its own `pat`, instead of per-user OAuth. All users then share the PAT owner's identity and role.",
         "x-ui-widget": "textarea"
       },
       "oauthScope": {
@@ -83,6 +89,12 @@
               "default": 60,
               "minimum": 5,
               "maximum": 600
+            },
+            "pat": {
+              "type": "string",
+              "title": "Programmatic Access Token (PAT)",
+              "description": "Optional. Snowflake PAT for this server; overrides `snowflakePat` and OAuth. All users then share the PAT owner's identity and role.",
+              "x-ui-widget": "textarea"
             }
           }
         }
@@ -90,8 +102,6 @@
     },
     "required": [
       "snowflakeBaseUrl",
-      "oauthClientId",
-      "oauthClientSecret",
       "servers"
     ]
   },
