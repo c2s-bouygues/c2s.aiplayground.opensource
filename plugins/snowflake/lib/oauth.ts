@@ -7,6 +7,10 @@
  * are pure config so multiple plugin instances (different Snowflake accounts)
  * could in principle coexist on the same host.
  *
+ * OAuth is the default. A server with a Programmatic Access Token (its own
+ * `pat`, or the account-wide `snowflakePat`) skips OAuth entirely — see
+ * `resolvePat`.
+ *
  * Per RFC 6749 §2.3.1 we send client_id/client_secret in the form body.
  * Snowflake's token endpoint accepts that for CUSTOM CONFIDENTIAL clients
  * (verified empirically — body-credentials work).
@@ -171,6 +175,8 @@ export interface SnowflakeServerConfig {
 	mcpServerPath: string;
 	enabled?: boolean;
 	timeoutSeconds?: number;
+	/** Programmatic Access Token for this server. Overrides `snowflakePat` and OAuth. */
+	pat?: string;
 }
 
 export function getServers(config: ToolConfigValues): SnowflakeServerConfig[] {
@@ -181,6 +187,29 @@ export function getServers(config: ToolConfigValues): SnowflakeServerConfig[] {
 
 export function getEnabledServers(config: ToolConfigValues): SnowflakeServerConfig[] {
 	return getServers(config).filter((s) => s.enabled !== false);
+}
+
+/**
+ * Resolve the Programmatic Access Token for a server: `servers[i].pat`, then the
+ * account-wide `snowflakePat`. `undefined` means the server uses per-user OAuth.
+ */
+export function resolvePat(
+	config: ToolConfigValues,
+	server: SnowflakeServerConfig
+): string | undefined {
+	const own = typeof server.pat === 'string' ? server.pat.trim() : '';
+	if (own) return own;
+	const global = typeof config?.snowflakePat === 'string' ? config.snowflakePat.trim() : '';
+	return global || undefined;
+}
+
+export function serverUsesPat(config: ToolConfigValues, server: SnowflakeServerConfig): boolean {
+	return resolvePat(config, server) !== undefined;
+}
+
+/** True when at least one enabled server has no PAT and therefore relies on OAuth. */
+export function needsOAuth(config: ToolConfigValues): boolean {
+	return getEnabledServers(config).some((s) => !serverUsesPat(config, s));
 }
 
 export function findServer(config: ToolConfigValues, serverId: string): SnowflakeServerConfig {

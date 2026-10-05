@@ -5,7 +5,8 @@
  * `tools/list`) is wrapped as an individual AI Playground tool. Unlike discovery
  * — which runs with the connecting admin's token — execution uses the *chat
  * user's* per-conversation OAuth token (`ctx.tokens` via `runTool`), so every
- * caller acts as themselves against Snowflake.
+ * caller acts as themselves against Snowflake — unless the server has a PAT, in
+ * which case every caller shares the PAT owner's identity.
  */
 
 import { tool, jsonSchema } from 'ai';
@@ -63,11 +64,11 @@ export function buildSnowflakeProxyToolDef(
 				description: llmDescription,
 				inputSchema: jsonSchema<Record<string, unknown>>(inputSchema),
 				execute: async (args) =>
-					runTool(ctx, async ({ token, config }) => {
+					runTool(ctx, server, async ({ token, authType, config }) => {
 						const result = await callTool(
 							config,
 							server.id,
-							token,
+							{ token, authType },
 							toolName,
 							(args as Record<string, unknown>) ?? {}
 						);
@@ -94,26 +95,43 @@ export function buildSnowflakeProxyToolDef(
 	};
 }
 
+/**
+ * Set or clear the per-user OAuth requirement on a declaration. PAT servers need
+ * no "Connect" step, so they must not declare `requiresPluginOAuth`. Also applied
+ * on snapshot restore, as the auth mode may have changed since discovery.
+ */
+export function applyAuthRequirement(
+	declaration: PluginToolDeclaration,
+	usesPat: boolean
+): PluginToolDeclaration {
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const { requiresPluginOAuth: _ignored, ...rest } = declaration;
+	return usesPat ? rest : { ...rest, requiresPluginOAuth: 'snowflake' };
+}
+
 /** Build the UI/LLM declaration for a discovered Snowflake tool. */
 export function buildSnowflakeDeclaration(
 	server: SnowflakeServerConfig,
-	descriptor: McpToolDescriptor
+	descriptor: McpToolDescriptor,
+	usesPat: boolean
 ): PluginToolDeclaration {
 	const description = descriptor.description ?? '';
 	const toolId = `${sanitizeToolId(server.id)}_${sanitizeToolId(descriptor.name)}`;
-	return {
-		id: toolId,
-		name: descriptor.name,
-		description: `[${server.name}] ${truncate(description, 120)}`,
-		category: `snowflake_${sanitizeToolId(server.id)}`,
-		categoryLabel: server.name,
-		icon: 'simple-icons:snowflake',
-		requiresPluginOAuth: 'snowflake',
-		systemPromptInstructions: {
-			fr: `- ${toolId}: ${description} (serveur Snowflake MCP « ${server.name} »)`,
-			en: `- ${toolId}: ${description} (via Snowflake MCP server "${server.name}")`
-		}
-	};
+	return applyAuthRequirement(
+		{
+			id: toolId,
+			name: descriptor.name,
+			description: `[${server.name}] ${truncate(description, 120)}`,
+			category: `snowflake_${sanitizeToolId(server.id)}`,
+			categoryLabel: server.name,
+			icon: 'simple-icons:snowflake',
+			systemPromptInstructions: {
+				fr: `- ${toolId}: ${description} (serveur Snowflake MCP « ${server.name} »)`,
+				en: `- ${toolId}: ${description} (via Snowflake MCP server "${server.name}")`
+			}
+		},
+		usesPat
+	);
 }
 
 /**
@@ -121,9 +139,10 @@ export function buildSnowflakeDeclaration(
  */
 export function createSnowflakeProxyTool(
 	server: SnowflakeServerConfig,
-	descriptor: McpToolDescriptor
+	descriptor: McpToolDescriptor,
+	usesPat: boolean
 ): { toolDef: PluginToolDefinition; declaration: PluginToolDeclaration } {
-	const declaration = buildSnowflakeDeclaration(server, descriptor);
+	const declaration = buildSnowflakeDeclaration(server, descriptor, usesPat);
 	const toolDef = buildSnowflakeProxyToolDef(
 		server,
 		descriptor.name,
