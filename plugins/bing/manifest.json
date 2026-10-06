@@ -3,7 +3,6 @@
   "name": "Bing Web Search",
   "version": "1.0.0",
   "description": "Search the web using an Azure AI Foundry agent pre-configured with Bing grounding",
-  "author": "AI Playground",
   "license": "MIT",
   "icon": "simple-icons:microsoftbing",
   "category": "search",

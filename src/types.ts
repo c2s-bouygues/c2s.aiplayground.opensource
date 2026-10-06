@@ -204,6 +204,12 @@ export interface PluginToolDeclaration {
 	consumesConversationFiles?: boolean;
 	/** Extra selection rule injected into the smart-tools prompt when this tool is eligible. */
 	smartToolsHint?: string;
+	/**
+	 * How smart mode selects this tool: `individual` makes it selectable on its own,
+	 * `group` enables its whole category at once. Defaults to the manifest's
+	 * `smartSelection`, itself `individual`.
+	 */
+	smartSelection?: 'group' | 'individual';
 	systemPromptInstructions: string | { [locale: string]: string };
 }
 
@@ -215,10 +221,16 @@ export interface PluginManifest {
 	name: string;
 	version: string;
 	description: string;
-	author: string;
+	author?: string;
 	license: string;
 	icon?: string;
 	category?: string;
+	/**
+	 * Smart-mode selection unit of this plugin's tools (a tool declaration may override it).
+	 * `individual` (default): tools are picked one by one. `group`: the whole category is
+	 * enabled at once — for tools that only make sense together.
+	 */
+	smartSelection?: 'group' | 'individual';
 	homepage?: string;
 	repository?: string;
 	minCoreVersion?: string;

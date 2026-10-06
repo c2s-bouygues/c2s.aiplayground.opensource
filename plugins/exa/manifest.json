@@ -3,7 +3,6 @@
 	"name": "Exa Search",
 	"version": "1.0.0",
 	"description": "Neural and keyword web search powered by Exa, with direct synthesized answers and citations",
-	"author": "AI Playground",
 	"license": "MIT",
 	"icon": "iconoir:internet",
 	"category": "search",
