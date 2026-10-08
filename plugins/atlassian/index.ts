@@ -144,7 +144,6 @@ const plugin: PluginExport = {
 			});
 		}
 
-		console.log(`[atlassian] Discovered ${tools.length} tools from ${resolveMcpUrl(config)}`);
 		return { tools, declarations, snapshot };
 	},
 
