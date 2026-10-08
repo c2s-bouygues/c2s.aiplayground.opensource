@@ -179,6 +179,7 @@ Requis pour les outils **Jira Service Management** et pour les usages sans utili
 | « Access to this domain is restricted / Your admin has blocked this domain » alors que le domaine est listé | Liste « Vos domaines » non appliquée côté Atlassian | Problème connu, voir §1.2 et [issue #254](https://github.com/atlassian/atlassian-mcp-server/issues/254) |
 | Aucun site proposé sur le consentement | MCP non activé pour l'org ou pas de licence Jira/Confluence | §1.1 |
 | Refresh échoue après redémarrage | Client DCR perdu (mémoire) | Renseigner *OAuth Client ID* (§3) |
+| Seulement 3 outils découverts (`atlassianUserInfo`, `getAccessibleAtlassianResources`, `getContentFormatGuide`) | Le jeton admin n'a pas les scopes produit : cases Read/Write/Search décochées au consentement, ou onglet *Autorisations* de l'organisation propriétaire du site restreint pour ce compte. Le log `[atlassian] Discovered N tool(s) … granted scope:` montre les scopes accordés | Déconnecter, reconnecter en acceptant toutes les permissions, *Refresh tools* |
 | `429` | Quota Atlassian | Le message indique `retry-after` |
 | Outils JSM en erreur en mode oauth | JSM exige `api_token` | §4 |
 
