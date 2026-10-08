@@ -56,11 +56,36 @@ https://beta.playground.example.com/**
 Le dev local en `https://localhost:5173` n'est **pas** couvert par la règle localhost
 (HTTP seulement) : soit l'ajouter aussi (`https://localhost:5173/**`), soit servir en HTTP.
 
+**Attention : la liste de domaines qui compte est celle de l'organisation propriétaire du site**,
+pas celle que `admin.atlassian.com` ouvre par défaut. Un compte peut être admin d'une organisation
+sans site rattaché : sa page Rovo MCP server accepte des domaines qui ne s'appliquent à rien.
+Vérifier l'organisation dans l'URL d'administration du site (⚙ → Administration) avant de saisir
+les domaines. Symptôme : « Your admin has blocked this domain » malgré une liste correcte
+(cas résolu par le support Atlassian, ticket PCS-3855899, octobre 2026).
+
 Si l'erreur persiste après ajout : supprimer l'entrée, la ré-ajouter à l'identique,
 enregistrer, réessayer en navigation privée (le réglage peut être affiché sans être
 propagé au service d'enforcement — cf. KB Atlassian).
 
-### 1.3 Ce qu'il ne faut PAS faire
+> **Problème connu (septembre 2026).** Sur certaines organisations, la liste « Vos domaines »
+> n'est pas appliquée par le serveur d'autorisation : le consentement affiche
+> *« Access to this domain is restricted. Your admin has blocked this domain … »* pour un domaine
+> pourtant listé sous toutes les formes documentées, alors que les domaines pris en charge par
+> Atlassian (`localhost`, `claude.ai`…) passent. Le problème est indépendant du client OAuth, de la
+> ressource (`v2/mcp` ou `v1/mcp/authv2`) et du format du motif.
+> Suivi : [atlassian/atlassian-mcp-server#254](https://github.com/atlassian/atlassian-mcp-server/issues/254).
+> Contournement en attendant : développer/valider en `http://localhost:*/**`, ou activer
+> l'*Enterprise-managed authentication* (§1.3) si l'IdP le permet.
+
+### 1.3 Enterprise-managed authentication (beta)
+
+Onglet *Authentification* → « Allow enterprise managed authentication ». L'autorisation MCP passe
+alors par l'IdP de l'organisation (Cross App Access / XAA : assertion d'identité échangée au token
+endpoint Atlassian) et **la liste de domaines ne s'applique plus**. Prérequis : un IdP compatible
+(documenté par Atlassian pour Okta uniquement) et un mode d'authentification dédié dans le plugin,
+non implémenté à ce jour.
+
+### 1.4 Ce qu'il ne faut PAS faire
 
 - **Ne pas créer d'app OAuth 2.0 (3LO) dans `developer.atlassian.com`.** Le serveur MCP a son
   propre serveur d'autorisation et n'accepte pas ces `client_id`. Le plugin enregistre son
@@ -79,7 +104,7 @@ propagé au service d'enforcement — cf. KB Atlassian).
 | Authentication mode | `oauth` | `api_token` pour un usage headless / JSM |
 | OAuth Client ID | vide au 1er lancement, puis coller le `client_id` logué | Voir §3 |
 | OAuth Client Secret | vide | Client public PKCE |
-| OAuth Scopes | *(défaut)* | `offline_access read:me` + agent-interface Jira/Confluence/Rovo |
+| OAuth Scopes | *(défaut)* | `offline_access read:me read:account email` + agent-interface Jira/Confluence/Rovo. **`read:account` et `email` sont obligatoires** (voir §5) |
 | OAuth Authorize URL | *(vide)* → `https://auth.atlassian.com/authorize` | |
 | OAuth Token URL | *(vide)* → `https://auth.atlassian.com/oauth/token` | |
 | OAuth Registration URL | *(vide)* → `https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register` | Serveur d'autorisation annoncé par la ressource v2 |
@@ -149,8 +174,9 @@ Requis pour les outils **Jira Service Management** et pour les usages sans utili
 |---|---|---|
 | `Atlassian non connecté` | Aucun jeton pour l'utilisateur/admin | Cliquer *Connecter* |
 | `401 … invalid_token` | Jeton émis par l'ancien serveur `mcp.atlassian.com/v1/*`, ou jeton sans `resource` | Vider les URL OAuth surchargées et *OAuth Client ID*, déconnecter/reconnecter |
-| Consentement OK puis `invalid_request / Incorrect request parameters` | Redirect URL absente de *Domain settings* (ou `https://localhost`) | §1.2 |
+| Consentement OK puis `invalid_request / Incorrect request parameters` (sur `/authorize/resume`, code `6e2afa07-…`) | Scopes `read:account` et/ou `email` absents de la demande (et `prompt=consent` requis). Vérifiés le 2026-10-08 avec le client de référence `mcp-remote` | Garder les scopes par défaut, ou au minimum y conserver `read:account email` |
 | « Your organization admin must authorize access from this redirect URL » | Idem, variante affichée sur le consentement | §1.2 |
+| « Access to this domain is restricted / Your admin has blocked this domain » alors que le domaine est listé | Liste « Vos domaines » non appliquée côté Atlassian | Problème connu, voir §1.2 et [issue #254](https://github.com/atlassian/atlassian-mcp-server/issues/254) |
 | Aucun site proposé sur le consentement | MCP non activé pour l'org ou pas de licence Jira/Confluence | §1.1 |
 | Refresh échoue après redémarrage | Client DCR perdu (mémoire) | Renseigner *OAuth Client ID* (§3) |
 | `429` | Quota Atlassian | Le message indique `retry-after` |

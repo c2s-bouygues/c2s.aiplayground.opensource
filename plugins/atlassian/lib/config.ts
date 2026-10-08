@@ -15,8 +15,11 @@ export const DEFAULT_MCP_URL = 'https://mcp.atlassian.com/v2/mcp';
 export const DEFAULT_AUTHORIZE_URL = 'https://auth.atlassian.com/authorize';
 export const DEFAULT_TOKEN_URL = 'https://auth.atlassian.com/oauth/token';
 export const DEFAULT_REGISTRATION_URL = 'https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register';
+// `read:account` and `email` are required by the Atlassian MCP authorization server:
+// without them the consent screen renders but `/authorize/resume` rejects the request
+// with "invalid_request / Incorrect request parameters" (verified 2026-10-08).
 export const DEFAULT_SCOPE =
-	'offline_access read:me read:jira:agent-interface write:jira:agent-interface search:jira:agent-interface read:confluence:agent-interface write:confluence:agent-interface search:confluence:agent-interface search:rovo:agent-interface';
+	'offline_access read:me read:account email read:jira:agent-interface write:jira:agent-interface search:jira:agent-interface read:confluence:agent-interface write:confluence:agent-interface search:confluence:agent-interface search:rovo:agent-interface';
 
 export type AuthMode = 'oauth' | 'api_token';
 
