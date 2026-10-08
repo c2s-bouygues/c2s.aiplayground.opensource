@@ -199,7 +199,7 @@ plugins/atlassian/
 │   ├── oauth.ts         DCR, PKCE S256, authorize/exchange/refresh, identité (read:me)
 │   ├── mcp-client.ts    client Streamable HTTP JSON-RPC (initialize, session, SSE/JSON, 401/404/429)
 │   └── shared.ts        résolution du jeton (admin vs utilisateur), wrapper runTool
-└── tools/proxy.ts       fabrique d'outils proxy, catégorisation par produit, injection cloudId
+└── tools/proxy.ts       fabrique d'outils proxy (catégorie unique « Atlassian », produit en préfixe de description), injection cloudId
 ```
 
 Flux OAuth : PRM `v2/mcp` → serveur d'autorisation `auth.atlassian.com/<tenant>` → DCR
