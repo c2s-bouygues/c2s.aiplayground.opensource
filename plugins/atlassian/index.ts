@@ -116,6 +116,13 @@ const plugin: PluginExport = {
 		const authHeader = await resolveAuthHeader(config, env, context?.tokens);
 
 		const descriptors = await listTools(config, authHeader);
+		// Atlassian filters tools/list by the scopes actually granted to the token, so a
+		// short list almost always means a narrow consent. Log both to make that visible.
+		const grantedScope = (await context?.tokens?.get())?.scope;
+		console.info(
+			`[atlassian] Discovered ${descriptors.length} tool(s) from ${resolveMcpUrl(config)}` +
+				(grantedScope ? ` (granted scope: ${grantedScope})` : ' (granted scope unknown: api_token mode or scope not returned)')
+		);
 		const tools: PluginToolDefinition[] = [];
 		const declarations: PluginToolDeclaration[] = [];
 		const snapshot: DiscoveredToolSnapshot[] = [];
@@ -137,7 +144,6 @@ const plugin: PluginExport = {
 			});
 		}
 
-		console.log(`[atlassian] Discovered ${tools.length} tools from ${resolveMcpUrl(config)}`);
 		return { tools, declarations, snapshot };
 	},
 

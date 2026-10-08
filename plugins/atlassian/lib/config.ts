@@ -71,8 +71,18 @@ export function resolveRegistrationUrl(config: ToolConfigValues): string {
 	return str(config?.oauthRegistrationUrl) ?? DEFAULT_REGISTRATION_URL;
 }
 
+/**
+ * Scopes the Atlassian authorization server requires on every request. They are merged
+ * into whatever the admin configured so that a stale `oauthScope` value saved before
+ * they were added (or a hand-written list that omits them) cannot break the flow.
+ */
+export const REQUIRED_SCOPES = ['read:me', 'read:account', 'email'] as const;
+
 export function resolveScope(config: ToolConfigValues): string {
-	return str(config?.oauthScope) ?? DEFAULT_SCOPE;
+	const configured = (str(config?.oauthScope) ?? DEFAULT_SCOPE).split(/\s+/).filter(Boolean);
+	const scopes = new Set(configured);
+	for (const required of REQUIRED_SCOPES) scopes.add(required);
+	return [...scopes].join(' ');
 }
 
 export function resolveConfiguredClient(config: ToolConfigValues): {

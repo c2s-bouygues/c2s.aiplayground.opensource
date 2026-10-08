@@ -155,8 +155,10 @@ export function buildAtlassianDeclaration(descriptor: McpToolDescriptor): Plugin
 		id: toolId,
 		name: descriptor.title ?? descriptor.name,
 		description: `[${product.label}] ${truncate(description, 120)}`,
-		category: `atlassian_${product.key}`,
-		categoryLabel: product.label,
+		// Every discovered tool lands in one "Atlassian" category in the tool picker; the
+		// product (Jira, Confluence, …) is kept as a description prefix for the model.
+		category: 'atlassian',
+		categoryLabel: 'Atlassian',
 		icon: product.icon,
 		requiresPluginOAuth: 'atlassian',
 		systemPromptInstructions: {

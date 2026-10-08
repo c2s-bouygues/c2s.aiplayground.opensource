@@ -104,7 +104,7 @@ non implémenté à ce jour.
 | Authentication mode | `oauth` | `api_token` pour un usage headless / JSM |
 | OAuth Client ID | vide au 1er lancement, puis coller le `client_id` logué | Voir §3 |
 | OAuth Client Secret | vide | Client public PKCE |
-| OAuth Scopes | *(défaut)* | `offline_access read:me read:account email` + agent-interface Jira/Confluence/Rovo. **`read:account` et `email` sont obligatoires** (voir §5) |
+| OAuth Scopes | *(défaut)* | `offline_access read:me read:account email` + agent-interface Jira/Confluence/Rovo. **`read:account` et `email` sont obligatoires** (voir §5) ; le plugin les ajoute d'office même si le champ les omet |
 | OAuth Authorize URL | *(vide)* → `https://auth.atlassian.com/authorize` | |
 | OAuth Token URL | *(vide)* → `https://auth.atlassian.com/oauth/token` | |
 | OAuth Registration URL | *(vide)* → `https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register` | Serveur d'autorisation annoncé par la ressource v2 |
@@ -179,6 +179,7 @@ Requis pour les outils **Jira Service Management** et pour les usages sans utili
 | « Access to this domain is restricted / Your admin has blocked this domain » alors que le domaine est listé | Liste « Vos domaines » non appliquée côté Atlassian | Problème connu, voir §1.2 et [issue #254](https://github.com/atlassian/atlassian-mcp-server/issues/254) |
 | Aucun site proposé sur le consentement | MCP non activé pour l'org ou pas de licence Jira/Confluence | §1.1 |
 | Refresh échoue après redémarrage | Client DCR perdu (mémoire) | Renseigner *OAuth Client ID* (§3) |
+| Seulement 3 outils découverts (`atlassianUserInfo`, `getAccessibleAtlassianResources`, `getContentFormatGuide`) | Le jeton admin n'a pas les scopes produit : cases Read/Write/Search décochées au consentement, ou onglet *Autorisations* de l'organisation propriétaire du site restreint pour ce compte. Le log `[atlassian] Discovered N tool(s) … granted scope:` montre les scopes accordés | Déconnecter, reconnecter en acceptant toutes les permissions, *Refresh tools* |
 | `429` | Quota Atlassian | Le message indique `retry-after` |
 | Outils JSM en erreur en mode oauth | JSM exige `api_token` | §4 |
 
@@ -198,7 +199,7 @@ plugins/atlassian/
 │   ├── oauth.ts         DCR, PKCE S256, authorize/exchange/refresh, identité (read:me)
 │   ├── mcp-client.ts    client Streamable HTTP JSON-RPC (initialize, session, SSE/JSON, 401/404/429)
 │   └── shared.ts        résolution du jeton (admin vs utilisateur), wrapper runTool
-└── tools/proxy.ts       fabrique d'outils proxy, catégorisation par produit, injection cloudId
+└── tools/proxy.ts       fabrique d'outils proxy (catégorie unique « Atlassian », produit en préfixe de description), injection cloudId
 ```
 
 Flux OAuth : PRM `v2/mcp` → serveur d'autorisation `auth.atlassian.com/<tenant>` → DCR
