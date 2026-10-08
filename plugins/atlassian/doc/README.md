@@ -104,7 +104,7 @@ non implémenté à ce jour.
 | Authentication mode | `oauth` | `api_token` pour un usage headless / JSM |
 | OAuth Client ID | vide au 1er lancement, puis coller le `client_id` logué | Voir §3 |
 | OAuth Client Secret | vide | Client public PKCE |
-| OAuth Scopes | *(défaut)* | `offline_access read:me` + agent-interface Jira/Confluence/Rovo |
+| OAuth Scopes | *(défaut)* | `offline_access read:me read:account email` + agent-interface Jira/Confluence/Rovo. **`read:account` et `email` sont obligatoires** (voir §5) |
 | OAuth Authorize URL | *(vide)* → `https://auth.atlassian.com/authorize` | |
 | OAuth Token URL | *(vide)* → `https://auth.atlassian.com/oauth/token` | |
 | OAuth Registration URL | *(vide)* → `https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register` | Serveur d'autorisation annoncé par la ressource v2 |
@@ -174,7 +174,7 @@ Requis pour les outils **Jira Service Management** et pour les usages sans utili
 |---|---|---|
 | `Atlassian non connecté` | Aucun jeton pour l'utilisateur/admin | Cliquer *Connecter* |
 | `401 … invalid_token` | Jeton émis par l'ancien serveur `mcp.atlassian.com/v1/*`, ou jeton sans `resource` | Vider les URL OAuth surchargées et *OAuth Client ID*, déconnecter/reconnecter |
-| Consentement OK puis `invalid_request / Incorrect request parameters` (sur `/authorize/resume`) | Paramètre `prompt=consent` absent de l'URL d'autorisation (requis par Atlassian). Le plugin l'envoie depuis la v1.0.1 ; vérifier qu'aucune surcharge ne le retire | — |
+| Consentement OK puis `invalid_request / Incorrect request parameters` (sur `/authorize/resume`, code `6e2afa07-…`) | Scopes `read:account` et/ou `email` absents de la demande (et `prompt=consent` requis). Vérifiés le 2026-10-08 avec le client de référence `mcp-remote` | Garder les scopes par défaut, ou au minimum y conserver `read:account email` |
 | « Your organization admin must authorize access from this redirect URL » | Idem, variante affichée sur le consentement | §1.2 |
 | « Access to this domain is restricted / Your admin has blocked this domain » alors que le domaine est listé | Liste « Vos domaines » non appliquée côté Atlassian | Problème connu, voir §1.2 et [issue #254](https://github.com/atlassian/atlassian-mcp-server/issues/254) |
 | Aucun site proposé sur le consentement | MCP non activé pour l'org ou pas de licence Jira/Confluence | §1.1 |

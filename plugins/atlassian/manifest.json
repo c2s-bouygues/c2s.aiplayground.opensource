@@ -58,8 +58,8 @@
       "oauthScope": {
         "type": "string",
         "title": "OAuth Scopes",
-        "description": "Space-separated scopes requested at authorization. Default covers Jira + Confluence read/write/search plus Rovo search. See https://mcp.atlassian.com/.well-known/oauth-protected-resource/v2/mcp for the full list.",
-        "default": "offline_access read:me read:jira:agent-interface write:jira:agent-interface search:jira:agent-interface read:confluence:agent-interface write:confluence:agent-interface search:confluence:agent-interface search:rovo:agent-interface",
+        "description": "Space-separated scopes requested at authorization. Default covers Jira + Confluence read/write/search plus Rovo search. Always keep read:account and email: Atlassian rejects the authorization after consent without them. See https://mcp.atlassian.com/.well-known/oauth-protected-resource/v2/mcp for the full list.",
+        "default": "offline_access read:me read:account email read:jira:agent-interface write:jira:agent-interface search:jira:agent-interface read:confluence:agent-interface write:confluence:agent-interface search:confluence:agent-interface search:rovo:agent-interface",
         "x-ui-widget": "textarea",
         "x-ui-group": "OAuth",
         "x-ui-order": 12
