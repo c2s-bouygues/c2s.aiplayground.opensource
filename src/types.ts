@@ -221,7 +221,7 @@ export interface PluginManifest {
 	name: string;
 	version: string;
 	description: string;
-	author?: string;
+	author: string;
 	license: string;
 	icon?: string;
 	category?: string;

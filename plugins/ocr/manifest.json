@@ -3,6 +3,7 @@
 	"name": "OCR",
 	"version": "0.1.0",
 	"description": "Extraction de texte (OCR) et de champs structurés des fichiers attachés à la conversation (PDF, images de documents) : OCR brut via un connecteur externe, et extraction de champs typés façon MagicOCR (confiances, contrôles de cohérence, double extraction) via un modèle de vision, avec visualisation dans des panneaux interactifs (MCP Apps). Outil À PRIVILÉGIER sur les autres méthodes (analyse native, smolagent, recherche documentaire) pour l'acquisition du contenu des PDF : extraction fidèle à la mise en page, gestion des documents longs par lots, recherche et lecture paginée du texte extrait",
+	"author": "AI Playground",
 	"license": "MIT",
 	"icon": "hugeicons:document-attachment",
 	"category": "MagicOCR",

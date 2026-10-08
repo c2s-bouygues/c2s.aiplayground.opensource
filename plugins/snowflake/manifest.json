@@ -3,6 +3,7 @@
   "name": "Snowflake MCP",
   "version": "2.0.0",
   "description": "Dynamically discovers and exposes the tools of one or more Snowflake Cortex Agents MCP servers (JSON-RPC 2.0 over HTTP). All MCP servers share a single Snowflake account and OAuth integration; the `servers[]` array lists the individual MCP endpoints (database/schema/mcp_server) to expose. Tools are discovered on demand (admin Connect + Refresh) and execute per-user.",
+  "author": "AI Playground",
   "dynamicTools": true,
   "skipRefreshOnRestart": true,
   "license": "MIT",

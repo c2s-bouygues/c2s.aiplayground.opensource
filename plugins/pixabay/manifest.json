@@ -3,6 +3,7 @@
   "name": "Pixabay Image Search",
   "version": "1.0.0",
   "description": "Search for royalty-free images on Pixabay and store them locally",
+  "author": "AI Playground",
   "license": "MIT",
   "icon": "tabler:photo-search",
   "category": "search",

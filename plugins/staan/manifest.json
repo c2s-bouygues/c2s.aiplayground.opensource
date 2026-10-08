@@ -3,6 +3,7 @@
 	"name": "Staan Web Search",
 	"version": "1.0.0",
 	"description": "AI-optimized web search via Staan (Qwant infrastructure, European/GDPR): ranked results enriched with semantically scored content chunks and optional full page content for RAG",
+	"author": "AI Playground",
 	"license": "MIT",
 	"icon": "hugeicons:internet",
 	"category": "search",
