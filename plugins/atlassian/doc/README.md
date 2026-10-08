@@ -104,7 +104,7 @@ non implémenté à ce jour.
 | Authentication mode | `oauth` | `api_token` pour un usage headless / JSM |
 | OAuth Client ID | vide au 1er lancement, puis coller le `client_id` logué | Voir §3 |
 | OAuth Client Secret | vide | Client public PKCE |
-| OAuth Scopes | *(défaut)* | `offline_access read:me read:account email` + agent-interface Jira/Confluence/Rovo. **`read:account` et `email` sont obligatoires** (voir §5) |
+| OAuth Scopes | *(défaut)* | `offline_access read:me read:account email` + agent-interface Jira/Confluence/Rovo. **`read:account` et `email` sont obligatoires** (voir §5) ; le plugin les ajoute d'office même si le champ les omet |
 | OAuth Authorize URL | *(vide)* → `https://auth.atlassian.com/authorize` | |
 | OAuth Token URL | *(vide)* → `https://auth.atlassian.com/oauth/token` | |
 | OAuth Registration URL | *(vide)* → `https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/dcr/register` | Serveur d'autorisation annoncé par la ressource v2 |
