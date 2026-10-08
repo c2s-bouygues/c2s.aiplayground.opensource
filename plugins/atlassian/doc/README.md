@@ -56,6 +56,13 @@ https://beta.playground.example.com/**
 Le dev local en `https://localhost:5173` n'est **pas** couvert par la règle localhost
 (HTTP seulement) : soit l'ajouter aussi (`https://localhost:5173/**`), soit servir en HTTP.
 
+**Attention : la liste de domaines qui compte est celle de l'organisation propriétaire du site**,
+pas celle que `admin.atlassian.com` ouvre par défaut. Un compte peut être admin d'une organisation
+sans site rattaché : sa page Rovo MCP server accepte des domaines qui ne s'appliquent à rien.
+Vérifier l'organisation dans l'URL d'administration du site (⚙ → Administration) avant de saisir
+les domaines. Symptôme : « Your admin has blocked this domain » malgré une liste correcte
+(cas résolu par le support Atlassian, ticket PCS-3855899, octobre 2026).
+
 Si l'erreur persiste après ajout : supprimer l'entrée, la ré-ajouter à l'identique,
 enregistrer, réessayer en navigation privée (le réglage peut être affiché sans être
 propagé au service d'enforcement — cf. KB Atlassian).
@@ -167,7 +174,7 @@ Requis pour les outils **Jira Service Management** et pour les usages sans utili
 |---|---|---|
 | `Atlassian non connecté` | Aucun jeton pour l'utilisateur/admin | Cliquer *Connecter* |
 | `401 … invalid_token` | Jeton émis par l'ancien serveur `mcp.atlassian.com/v1/*`, ou jeton sans `resource` | Vider les URL OAuth surchargées et *OAuth Client ID*, déconnecter/reconnecter |
-| Consentement OK puis `invalid_request / Incorrect request parameters` | Redirect URL absente de *Domain settings* (ou `https://localhost`) | §1.2 |
+| Consentement OK puis `invalid_request / Incorrect request parameters` (sur `/authorize/resume`) | Paramètre `prompt=consent` absent de l'URL d'autorisation (requis par Atlassian). Le plugin l'envoie depuis la v1.0.1 ; vérifier qu'aucune surcharge ne le retire | — |
 | « Your organization admin must authorize access from this redirect URL » | Idem, variante affichée sur le consentement | §1.2 |
 | « Access to this domain is restricted / Your admin has blocked this domain » alors que le domaine est listé | Liste « Vos domaines » non appliquée côté Atlassian | Problème connu, voir §1.2 et [issue #254](https://github.com/atlassian/atlassian-mcp-server/issues/254) |
 | Aucun site proposé sur le consentement | MCP non activé pour l'org ou pas de licence Jira/Confluence | §1.1 |

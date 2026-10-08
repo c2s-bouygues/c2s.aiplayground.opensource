@@ -149,7 +149,11 @@ export const atlassianOAuthHandlers: PluginOAuthHandlers = {
 			redirect_uri: redirectUri,
 			scope: resolveScope(config),
 			state,
-			resource: resolveResource(config)
+			resource: resolveResource(config),
+			// Atlassian marks `prompt=consent` as required on the authorization URL.
+			// Without it the consent screen is shown but `/authorize/resume` rejects the
+			// request with "invalid_request / Incorrect request parameters".
+			prompt: 'consent'
 		});
 		if (codeChallenge) {
 			params.set('code_challenge', codeChallenge);
