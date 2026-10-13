@@ -1,0 +1,83 @@
+{
+  "id": "snowflake_pat",
+  "name": "Snowflake MCP (PAT)",
+  "version": "1.0.0",
+  "description": "Dynamically discovers and exposes the tools of one or more Snowflake Cortex Agents MCP servers (JSON-RPC 2.0 over HTTP), authenticated with Programmatic Access Tokens (PAT) — no OAuth flow, so \"Refresh tools\" works without connecting. All MCP servers share a single Snowflake account; the `servers[]` array lists the individual MCP endpoints (database/schema/mcp_server), each using its own `pat` or the account-wide `snowflakePat`. Every user shares the PAT owner's Snowflake identity and role. For per-user OAuth, use the `snowflake` plugin.",
+  "author": "AI Playground",
+  "dynamicTools": true,
+  "skipRefreshOnRestart": true,
+  "license": "MIT",
+  "icon": "simple-icons:snowflake",
+  "category": "data",
+  "homepage": "https://docs.snowflake.com/en/user-guide/programmatic-access-tokens",
+  "requiredEnvVars": [],
+  "optionalEnvVars": [],
+  "configSchema": {
+    "type": "object",
+    "title": "Snowflake MCP (PAT) Configuration",
+    "properties": {
+      "snowflakeBaseUrl": {
+        "type": "string",
+        "title": "Snowflake Account URL",
+        "description": "Base URL of your Snowflake account, e.g. https://xy12345.snowflakecomputing.com"
+      },
+      "snowflakePat": {
+        "type": "string",
+        "title": "Programmatic Access Token (PAT)",
+        "description": "Account-wide Snowflake PAT used by every server without its own `pat`. All users share the PAT owner's identity and role.",
+        "x-ui-widget": "textarea"
+      },
+      "servers": {
+        "type": "array",
+        "title": "MCP Servers",
+        "description": "List of Snowflake managed MCP servers to expose. Each one needs a PAT (its own `pat` or the account-wide one above).",
+        "items": {
+          "type": "object",
+          "required": ["id", "name", "mcpServerPath"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "title": "Server ID",
+              "description": "Unique identifier used by tools to target this server (lowercase, e.g. 'analytics_cortex')."
+            },
+            "name": {
+              "type": "string",
+              "title": "Display Name",
+              "description": "Human-readable name for the server"
+            },
+            "mcpServerPath": {
+              "type": "string",
+              "title": "MCP Server Path",
+              "description": "Path of the managed MCP server, e.g. /api/v2/databases/MY_DB/schemas/MY_SCHEMA/mcp-servers/MY_MCP"
+            },
+            "pat": {
+              "type": "string",
+              "title": "Programmatic Access Token (PAT)",
+              "description": "Snowflake PAT for this server; overrides the account-wide `snowflakePat`.",
+              "x-ui-widget": "textarea"
+            },
+            "enabled": {
+              "type": "boolean",
+              "title": "Enabled",
+              "default": true
+            },
+            "timeoutSeconds": {
+              "type": "number",
+              "title": "Timeout (seconds)",
+              "description": "Maximum time for a tool call to this server.",
+              "default": 60,
+              "minimum": 5,
+              "maximum": 600
+            }
+          }
+        }
+      }
+    },
+    "required": ["snowflakeBaseUrl", "servers"]
+  },
+  "tools": [],
+  "i18n": {
+    "supportedLocales": ["fr", "en"],
+    "defaultLocale": "fr"
+  }
+}
