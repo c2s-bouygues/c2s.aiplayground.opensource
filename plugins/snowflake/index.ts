@@ -14,11 +14,6 @@
  * registered as an individual app tool and executes — at chat time — using the
  * calling user's own OAuth token.
  *
- * OAuth is the default. A server with a Programmatic Access Token (its own
- * `servers[i].pat`, or the account-wide `snowflakePat`) uses that token for both
- * discovery and execution instead: no "Connect" step, and every user shares the
- * PAT owner's Snowflake identity and role.
- *
  * OAuth credentials live entirely in the plugin config (admin UI) — no env vars
  * are consulted. This keeps the plugin agnostic of any specific Snowflake
  * instance and lets multiple deployments coexist.
@@ -33,19 +28,12 @@ import type {
 	JsonValue
 } from '../../src/types';
 import manifest from './manifest.json';
-import {
-	snowflakeOAuthHandlers,
-	getEnabledServers,
-	needsOAuth,
-	resolvePat,
-	serverUsesPat
-} from './lib/oauth';
-import { SnowflakeNotConnectedError, type SnowflakeAuth } from './lib/shared';
+import { snowflakeOAuthHandlers, getEnabledServers } from './lib/oauth';
+import { SnowflakeNotConnectedError } from './lib/shared';
 import { listTools, type McpToolDescriptor } from './lib/mcp-client';
 import {
 	createSnowflakeProxyTool,
-	buildSnowflakeProxyToolDef,
-	applyAuthRequirement
+	buildSnowflakeProxyToolDef
 } from './tools/proxy';
 
 /** Routing data stored in each snapshot entry's `meta` so a tool can be rebuilt on restore. */
@@ -71,10 +59,11 @@ const plugin: PluginExport = {
 			return `snowflakeBaseUrl is not a valid URL: "${baseUrl}"`;
 		}
 
-		if (config?.snowflakePat !== undefined && config.snowflakePat !== '') {
-			if (typeof config.snowflakePat !== 'string' || !config.snowflakePat.trim()) {
-				return 'snowflakePat must be a non-empty string';
-			}
+		if (!config?.oauthClientId || typeof config.oauthClientId !== 'string') {
+			return 'oauthClientId is required';
+		}
+		if (!config?.oauthClientSecret || typeof config.oauthClientSecret !== 'string') {
+			return 'oauthClientSecret is required';
 		}
 
 		if (config?.oauthAuthorizeUrl) {
@@ -115,21 +104,6 @@ const plugin: PluginExport = {
 			if (!s.mcpServerPath || typeof s.mcpServerPath !== 'string') {
 				return `servers[${i}]: mcpServerPath is required (e.g. /api/v2/databases/DB/schemas/SCHEMA/mcp-servers/NAME)`;
 			}
-			if (s.pat !== undefined && s.pat !== '') {
-				if (typeof s.pat !== 'string' || !s.pat.trim()) {
-					return `servers[${i}]: pat must be a non-empty string`;
-				}
-			}
-		}
-
-		// OAuth credentials are only needed when some enabled server has no PAT.
-		if (needsOAuth(config)) {
-			if (!config?.oauthClientId || typeof config.oauthClientId !== 'string') {
-				return 'oauthClientId is required (or set a PAT on every enabled server / snowflakePat)';
-			}
-			if (!config?.oauthClientSecret || typeof config.oauthClientSecret !== 'string') {
-				return 'oauthClientSecret is required (or set a PAT on every enabled server / snowflakePat)';
-			}
 		}
 
 		return true;
@@ -144,39 +118,22 @@ const plugin: PluginExport = {
 		declarations: PluginToolDeclaration[];
 		snapshot?: DiscoveredToolSnapshot[];
 	}> {
-		// The admin's OAuth token is only fetched if some server lacks a PAT.
-		const oauthToken = needsOAuth(config)
-			? (await context?.tokens?.get())?.accessToken
-			: undefined;
+		const token = (await context?.tokens?.get())?.accessToken;
+		if (!token) {
+			// Surfaced to the admin as a "connect first" message by the refresh endpoint.
+			throw new SnowflakeNotConnectedError(undefined);
+		}
 
 		const servers = getEnabledServers(config);
 		const tools: PluginToolDefinition[] = [];
 		const declarations: PluginToolDeclaration[] = [];
 		const snapshot: DiscoveredToolSnapshot[] = [];
-		let skippedForMissingToken = 0;
 
 		for (const server of servers) {
-			const pat = resolvePat(config, server);
-			const auth: SnowflakeAuth | undefined = pat
-				? { token: pat, authType: 'pat' }
-				: oauthToken
-					? { token: oauthToken, authType: 'oauth' }
-					: undefined;
-			if (!auth) {
-				console.warn(
-					`[snowflake] Skipping discovery for "${server.id}": no PAT and no OAuth connection`
-				);
-				skippedForMissingToken++;
-				continue;
-			}
 			try {
-				const descriptors = await listTools(config, server.id, auth);
+				const descriptors = await listTools(config, server.id, token);
 				for (const descriptor of descriptors) {
-					const { toolDef, declaration } = createSnowflakeProxyTool(
-						server,
-						descriptor,
-						auth.authType === 'pat'
-					);
+					const { toolDef, declaration } = createSnowflakeProxyTool(server, descriptor);
 					tools.push(toolDef);
 					declarations.push(declaration);
 					snapshot.push({
@@ -191,11 +148,6 @@ const plugin: PluginExport = {
 			} catch (err) {
 				console.error(`[snowflake] Tool discovery failed for server "${server.id}":`, err);
 			}
-		}
-
-		if (servers.length > 0 && skippedForMissingToken === servers.length) {
-			// Surfaced to the admin as a "connect first" message by the refresh endpoint.
-			throw new SnowflakeNotConnectedError(undefined);
 		}
 
 		return { tools, declarations, snapshot };
@@ -223,8 +175,7 @@ const plugin: PluginExport = {
 				entry.declaration.description
 			);
 			tools.push(toolDef);
-			// The auth mode may have changed since discovery (e.g. a PAT was added).
-			declarations.push(applyAuthRequirement(entry.declaration, serverUsesPat(config, server)));
+			declarations.push(entry.declaration);
 		}
 
 		return { tools, declarations };
@@ -232,7 +183,7 @@ const plugin: PluginExport = {
 
 	async onLoad() {
 		console.log(
-			'[snowflake] Plugin loaded — dynamic multi-server discovery (manual refresh; per-user OAuth or PAT)'
+			'[snowflake] Plugin loaded — dynamic multi-server discovery (manual refresh; per-user OAuth)'
 		);
 	}
 };

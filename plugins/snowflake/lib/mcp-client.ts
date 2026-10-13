@@ -13,7 +13,6 @@
 
 import type { ToolConfigValues } from '../../../src/types';
 import { resolveMcpUrl, resolveTimeoutMs } from './oauth';
-import type { SnowflakeAuth } from './shared';
 
 export interface McpToolDescriptor {
 	name: string;
@@ -99,7 +98,7 @@ async function parseMcpResponse<T>(res: Response): Promise<JsonRpcResponse<T>> {
 
 async function mcpCall<T>(
 	url: string,
-	auth: SnowflakeAuth,
+	token: string,
 	method: string,
 	params: unknown,
 	timeoutMs: number
@@ -114,20 +113,15 @@ async function mcpCall<T>(
 		params
 	};
 
-	const headers: Record<string, string> = {
-		Authorization: `Bearer ${auth.token}`,
-		'Content-Type': 'application/json',
-		Accept: 'application/json, text/event-stream'
-	};
-	if (auth.authType === 'pat') {
-		headers['X-Snowflake-Authorization-Token-Type'] = 'PROGRAMMATIC_ACCESS_TOKEN';
-	}
-
 	try {
 		const res = await fetch(url, {
 			method: 'POST',
 			signal: controller.signal,
-			headers,
+			headers: {
+				Authorization: `Bearer ${token}`,
+				'Content-Type': 'application/json',
+				Accept: 'application/json, text/event-stream'
+			},
 			body: JSON.stringify(requestBody)
 		});
 		if (!res.ok) {
@@ -154,11 +148,11 @@ async function mcpCall<T>(
 export async function listTools(
 	config: ToolConfigValues,
 	serverId: string,
-	auth: SnowflakeAuth
+	token: string
 ): Promise<McpToolDescriptor[]> {
 	const result = await mcpCall<{ tools: McpToolDescriptor[] }>(
 		resolveMcpUrl(config, serverId),
-		auth,
+		token,
 		'tools/list',
 		{},
 		resolveTimeoutMs(config, serverId)
@@ -169,13 +163,13 @@ export async function listTools(
 export async function callTool(
 	config: ToolConfigValues,
 	serverId: string,
-	auth: SnowflakeAuth,
+	token: string,
 	name: string,
 	args: Record<string, unknown>
 ): Promise<McpToolCallResult> {
 	return mcpCall<McpToolCallResult>(
 		resolveMcpUrl(config, serverId),
-		auth,
+		token,
 		'tools/call',
 		{ name, arguments: args },
 		resolveTimeoutMs(config, serverId)

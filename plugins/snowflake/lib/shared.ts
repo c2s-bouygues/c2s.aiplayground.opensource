@@ -6,16 +6,9 @@
  */
 
 import type { PluginContext, ToolConfigValues } from '../../../src/types';
-import { resolvePat, type SnowflakeServerConfig } from './oauth';
 
-export type SnowflakeAuthType = 'oauth' | 'pat';
-
-export interface SnowflakeAuth {
+export interface SnowflakeRuntime {
 	token: string;
-	authType: SnowflakeAuthType;
-}
-
-export interface SnowflakeRuntime extends SnowflakeAuth {
 	config: ToolConfigValues;
 }
 
@@ -31,37 +24,23 @@ export class SnowflakeNotConnectedError extends Error {
 	}
 }
 
-/**
- * Resolve the credentials for a server: its PAT when one is configured,
- * otherwise the calling user's OAuth token.
- */
-export async function getSnowflakeRuntime(
-	ctx: PluginContext,
-	server: SnowflakeServerConfig
-): Promise<SnowflakeRuntime> {
-	const config = ctx.pluginConfig;
-	const pat = resolvePat(config, server);
-	if (pat) {
-		return { token: pat, authType: 'pat', config };
-	}
+export async function getSnowflakeRuntime(ctx: PluginContext): Promise<SnowflakeRuntime> {
 	const token = await ctx.tokens.get();
 	if (!token?.accessToken) {
 		throw new SnowflakeNotConnectedError(ctx.locale);
 	}
 	return {
 		token: token.accessToken,
-		authType: 'oauth',
-		config
+		config: ctx.pluginConfig
 	};
 }
 
 export async function runTool<T>(
 	ctx: PluginContext,
-	server: SnowflakeServerConfig,
 	fn: (runtime: SnowflakeRuntime) => Promise<T>
 ): Promise<T | { success: false; message: string }> {
 	try {
-		const runtime = await getSnowflakeRuntime(ctx, server);
+		const runtime = await getSnowflakeRuntime(ctx);
 		return await fn(runtime);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
