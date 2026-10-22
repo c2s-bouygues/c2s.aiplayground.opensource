@@ -34,7 +34,9 @@ const MSG_RESULTS_FOUND: Record<Locale, string> = {
 	en: '{count} results found via Staan.',
 	es: '{count} resultados encontrados en Staan.',
 	zh: '通过 Staan 找到 {count} 个结果。',
-	de: '{count} Ergebnisse über Staan gefunden.'
+	de: '{count} Ergebnisse über Staan gefunden.',
+	it: '{count} risultati trovati tramite Staan.',
+	pt: '{count} resultados encontrados através do Staan.'
 };
 
 const MSG_NO_RESULTS: Record<Locale, string> = {
@@ -42,7 +44,9 @@ const MSG_NO_RESULTS: Record<Locale, string> = {
 	en: 'No results found for this search.',
 	es: 'No se encontraron resultados para esta búsqueda.',
 	zh: '未找到与此搜索相关的结果。',
-	de: 'Keine Ergebnisse für diese Suche gefunden.'
+	de: 'Keine Ergebnisse für diese Suche gefunden.',
+	it: 'Nessun risultato trovato per questa ricerca.',
+	pt: 'Nenhum resultado encontrado para esta pesquisa.'
 };
 
 const MSG_NOT_CONFIGURED: Record<Locale, string> = {
@@ -50,7 +54,9 @@ const MSG_NOT_CONFIGURED: Record<Locale, string> = {
 	en: 'Staan Web Search is not configured. Set the API key in the plugin configuration or the STAAN_API_KEY environment variable.',
 	es: 'Staan Web Search no está configurado. Define la clave API en la configuración del plugin o en la variable de entorno STAAN_API_KEY.',
 	zh: 'Staan 网页搜索未配置。请在插件配置中设置 API 密钥，或设置 STAAN_API_KEY 环境变量。',
-	de: 'Staan Web Search ist nicht konfiguriert. Hinterlege den API-Schlüssel in der Plugin-Konfiguration oder in der Umgebungsvariable STAAN_API_KEY.'
+	de: 'Staan Web Search ist nicht konfiguriert. Hinterlege den API-Schlüssel in der Plugin-Konfiguration oder in der Umgebungsvariable STAAN_API_KEY.',
+	it: "Staan Web Search non è configurato. Imposta la chiave API nella configurazione del plugin o nella variabile d'ambiente STAAN_API_KEY.",
+	pt: 'O Staan Web Search não está configurado. Defina a chave de API na configuração do plugin ou na variável de ambiente STAAN_API_KEY.'
 };
 
 const MSG_API_ERROR: Record<Locale, string> = {
@@ -58,7 +64,9 @@ const MSG_API_ERROR: Record<Locale, string> = {
 	en: 'Staan API error: {status} {statusText}',
 	es: 'Error de la API de Staan: {status} {statusText}',
 	zh: 'Staan API 错误：{status} {statusText}',
-	de: 'Staan-API-Fehler: {status} {statusText}'
+	de: 'Staan-API-Fehler: {status} {statusText}',
+	it: 'Errore API Staan: {status} {statusText}',
+	pt: 'Erro da API Staan: {status} {statusText}'
 };
 
 const MSG_SEARCH_ERROR: Record<Locale, string> = {
@@ -66,7 +74,9 @@ const MSG_SEARCH_ERROR: Record<Locale, string> = {
 	en: 'Error during web search: {error}',
 	es: 'Error durante la búsqueda web: {error}',
 	zh: '网页搜索时出错：{error}',
-	de: 'Fehler bei der Websuche: {error}'
+	de: 'Fehler bei der Websuche: {error}',
+	it: 'Errore durante la ricerca web: {error}',
+	pt: 'Erro durante a pesquisa na Web: {error}'
 };
 
 function msg(

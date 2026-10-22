@@ -61,7 +61,9 @@ const SEARCH_RESULTS_FOUND: Record<Locale, string> = {
 	en: '{count} results found via Bing.',
 	es: '{count} resultados encontrados en Bing.',
 	zh: '通过 Bing 找到 {count} 个结果。',
-	de: '{count} Ergebnisse über Bing gefunden.'
+	de: '{count} Ergebnisse über Bing gefunden.',
+	it: '{count} risultati trovati tramite Bing.',
+	pt: '{count} resultados encontrados através do Bing.'
 };
 
 function searchResultsFoundMsg(locale: Locale | undefined, count: number): string {

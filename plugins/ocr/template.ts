@@ -630,6 +630,22 @@ const LABELS = {
 		imageBoxesNone: 'Keine Bilder/Figuren von Mistral OCR in diesem Dokument erkannt',
 		textBoxesTip: 'Textzonen ein-/ausblenden (Mistral-OCR-Blöcke, sonst PDF-Textebene)',
 		textBoxesNone: 'Keine Textzonen verfügbar (keine Mistral-Blöcke und keine PDF-Textebene)'
+	},
+	it: {
+		text: 'Testo estratto', layout: 'Documento originale',
+		imageBoxes: 'Zone immagini', textBoxes: 'Zone di testo',
+		imageBoxesTip: 'Mostra/nascondi le zone di immagini e figure rilevate da Mistral OCR',
+		imageBoxesNone: 'Nessuna immagine/figura rilevata da Mistral OCR in questo documento',
+		textBoxesTip: 'Mostra/nascondi le zone di testo (blocchi Mistral OCR, altrimenti livello di testo del PDF)',
+		textBoxesNone: 'Nessuna zona di testo disponibile (nessun blocco Mistral e nessun livello di testo PDF)'
+	},
+	pt: {
+		text: 'Texto extraído', layout: 'Documento original',
+		imageBoxes: 'Zonas de imagens', textBoxes: 'Zonas de texto',
+		imageBoxesTip: 'Mostrar/ocultar as zonas de imagens e figuras detetadas pelo Mistral OCR',
+		imageBoxesNone: 'Nenhuma imagem/figura detetada pelo Mistral OCR neste documento',
+		textBoxesTip: 'Mostrar/ocultar as zonas de texto (blocos do Mistral OCR, ou a camada de texto do PDF)',
+		textBoxesNone: 'Nenhuma zona de texto disponível (sem blocos Mistral e sem camada de texto PDF)'
 	}
 };
 

@@ -18,7 +18,7 @@ export type JsonValue =
 	| JsonValue[]
 	| { [key: string]: JsonValue };
 
-export type Locale = 'fr' | 'en' | 'es' | 'zh' | 'de';
+export type Locale = 'fr' | 'en' | 'es' | 'zh' | 'de' | 'it' | 'pt';
 
 export interface ToolConfigProperty {
 	type: 'string' | 'number' | 'boolean' | 'array' | 'object';
@@ -66,6 +66,12 @@ export interface ToolConfigValues {
 export interface ToolContext {
 	datasourceIds: string[];
 	workspaceIds: string[];
+	/**
+	 * Set when the tools run for a Work task: the run that owns the workspace lease. Its
+	 * fencing token travels with every workspace mutation; its absence marks an ordinary
+	 * writer (chat, file explorer), which must yield to an active lease.
+	 */
+	workExecution?: { taskId: string; generation: number; fencingToken: number };
 	conversationId: string | null;
 	/**
 	 * Agent ID when the conversation is linked to an agent. Used by smolagent tools
@@ -82,9 +88,16 @@ export interface ToolContext {
 	 * Absent = unknown in this context; tools must degrade to a free-form field.
 	 */
 	accessibleProviders?: string[];
-	// Note: the core ToolContext also carries `alwaysApproveToolNames?: Set<string>`.
-	// It is intentionally omitted here — it's a core approval-orchestration concern
-	// (decides `needsApproval` wrapping), not part of the plugin contract.
+	/**
+	 * Per-request citation numbers, shared by every tool that returns `sources`
+	 * (documents, web, mail): `refOf(sourceId)` gives a stable `[Source N]`.
+	 * Absent outside chat (e.g. a tool built on its own); tools then number locally.
+	 */
+	sourceRefs?: { refOf(sourceId: string): number };
+	// Note: the core ToolContext also carries `alwaysApproveToolNames?: Set<string>`,
+	// `isPrivateMode?: boolean` and `privateModeAllowedTools?: Set<string>`. They are
+	// intentionally omitted here — core tool-orchestration concerns (`needsApproval`
+	// wrapping, private-mode filtering in createAgenticTools), not part of the plugin contract.
 }
 
 /**

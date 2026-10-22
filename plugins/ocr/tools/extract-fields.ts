@@ -79,7 +79,9 @@ const MSG_DONE: Record<Locale, string> = {
 	en: 'Extracted {count} field(s) from {fileName} (overall confidence: {confidence}%, mode: {mode}, connector: {provider}). Details are shown in the extraction panel.',
 	es: 'Extracción de {count} campo(s) de {fileName} completada (confianza global: {confidence}%, modo: {mode}, conector: {provider}). El detalle se muestra en el panel de extracción.',
 	zh: '已从 {fileName} 提取 {count} 个字段（总体置信度：{confidence}%，模式：{mode}，连接器：{provider}）。详情显示在提取面板中。',
-	de: '{count} Feld(er) aus {fileName} extrahiert (Gesamtkonfidenz: {confidence}%, Modus: {mode}, Konnektor: {provider}). Details werden im Extraktions-Panel angezeigt.'
+	de: '{count} Feld(er) aus {fileName} extrahiert (Gesamtkonfidenz: {confidence}%, Modus: {mode}, Konnektor: {provider}). Details werden im Extraktions-Panel angezeigt.',
+	it: 'Estrazione di {count} campo/i da {fileName} completata (affidabilità complessiva: {confidence}%, modalità: {mode}, connettore: {provider}). Il dettaglio è mostrato nel pannello di estrazione.',
+	pt: 'Extração de {count} campo(s) de {fileName} concluída (confiança global: {confidence}%, modo: {mode}, conector: {provider}). O detalhe é apresentado no painel de extração.'
 };
 
 const MSG_STUB_NOTICE: Record<Locale, string> = {
@@ -87,7 +89,9 @@ const MSG_STUB_NOTICE: Record<Locale, string> = {
 	en: 'NOTE: the LLM connector is not configured (missing API key) — DEMO result with placeholder values. Configure the OCR plugin in the admin UI (llmApiKey) or the ANTHROPIC_API_KEY / AZURE_AI_API_KEY environment variables.',
 	es: 'NOTA: el conector LLM no está configurado (falta la clave API) — resultado de DEMOSTRACIÓN con valores ficticios. Configura el plugin OCR en el admin (llmApiKey) o las variables ANTHROPIC_API_KEY / AZURE_AI_API_KEY.',
 	zh: '注意：LLM 连接器未配置（缺少 API 密钥）— 这是使用占位值的演示结果。请在管理界面配置 OCR 插件（llmApiKey）或设置 ANTHROPIC_API_KEY / AZURE_AI_API_KEY 环境变量。',
-	de: 'HINWEIS: Der LLM-Konnektor ist nicht konfiguriert (API-Schlüssel fehlt) — DEMO-Ergebnis mit Platzhalterwerten. Konfiguriere das OCR-Plugin im Admin-Bereich (llmApiKey) oder die Variablen ANTHROPIC_API_KEY / AZURE_AI_API_KEY.'
+	de: 'HINWEIS: Der LLM-Konnektor ist nicht konfiguriert (API-Schlüssel fehlt) — DEMO-Ergebnis mit Platzhalterwerten. Konfiguriere das OCR-Plugin im Admin-Bereich (llmApiKey) oder die Variablen ANTHROPIC_API_KEY / AZURE_AI_API_KEY.',
+	it: "NOTA: il connettore LLM non è configurato (chiave API mancante) — risultato DIMOSTRATIVO con valori fittizi. Configura il plugin OCR nell'admin (llmApiKey) o le variabili ANTHROPIC_API_KEY / AZURE_AI_API_KEY.",
+	pt: 'NOTA: o conector LLM não está configurado (chave de API em falta) — resultado de DEMONSTRAÇÃO com valores fictícios. Configure o plugin OCR na administração (llmApiKey) ou as variáveis ANTHROPIC_API_KEY / AZURE_AI_API_KEY.'
 };
 
 const MSG_FILE_NOT_ACCESSIBLE: Record<Locale, string> = {
@@ -95,7 +99,9 @@ const MSG_FILE_NOT_ACCESSIBLE: Record<Locale, string> = {
 	en: 'Error: file not accessible ({source}). Use exactly one of the file URLs listed in the conversation context — only files of the current conversation are readable.',
 	es: 'Error: archivo inaccesible ({source}). Usa exactamente una de las URLs de archivo listadas en el contexto — solo los archivos de la conversación actual son legibles.',
 	zh: '错误：无法访问文件（{source}）。请使用会话上下文中列出的文件 URL——只能读取当前会话的文件。',
-	de: 'Fehler: Datei nicht zugänglich ({source}). Verwende exakt eine der im Konversationskontext gelisteten Datei-URLs — nur Dateien der aktuellen Konversation sind lesbar.'
+	de: 'Fehler: Datei nicht zugänglich ({source}). Verwende exakt eine der im Konversationskontext gelisteten Datei-URLs — nur Dateien der aktuellen Konversation sind lesbar.',
+	it: 'Errore: file non accessibile ({source}). Usa esattamente uno degli URL dei file elencati nel contesto della conversazione — sono leggibili solo i file della conversazione corrente.',
+	pt: 'Erro: ficheiro inacessível ({source}). Utilize exatamente um dos URLs de ficheiros listados no contexto da conversa — só são legíveis os ficheiros da conversa atual.'
 };
 
 const MSG_UNSUPPORTED_TYPE: Record<Locale, string> = {
@@ -103,7 +109,9 @@ const MSG_UNSUPPORTED_TYPE: Record<Locale, string> = {
 	en: 'Error: unsupported file type ({contentType}). Accepted formats: PDF, JPEG, PNG, GIF, WEBP.',
 	es: 'Error: tipo de archivo no soportado ({contentType}). Formatos aceptados: PDF, JPEG, PNG, GIF, WEBP.',
 	zh: '错误：不支持的文件类型（{contentType}）。接受的格式：PDF、JPEG、PNG、GIF、WEBP。',
-	de: 'Fehler: Dateityp nicht unterstützt ({contentType}). Akzeptierte Formate: PDF, JPEG, PNG, GIF, WEBP.'
+	de: 'Fehler: Dateityp nicht unterstützt ({contentType}). Akzeptierte Formate: PDF, JPEG, PNG, GIF, WEBP.',
+	it: 'Errore: tipo di file non supportato ({contentType}). Formati accettati: PDF, JPEG, PNG, GIF, WEBP.',
+	pt: 'Erro: tipo de ficheiro não suportado ({contentType}). Formatos aceites: PDF, JPEG, PNG, GIF, WEBP.'
 };
 
 const MSG_FILE_TOO_LARGE: Record<Locale, string> = {
@@ -111,7 +119,9 @@ const MSG_FILE_TOO_LARGE: Record<Locale, string> = {
 	en: 'Error: file too large ({size} MB, maximum 25 MB).',
 	es: 'Error: archivo demasiado grande ({size} MB, máximo 25 MB).',
 	zh: '错误：文件过大（{size} MB，最大 25 MB）。',
-	de: 'Fehler: Datei zu groß ({size} MB, maximal 25 MB).'
+	de: 'Fehler: Datei zu groß ({size} MB, maximal 25 MB).',
+	it: 'Errore: file troppo grande ({size} MB, massimo 25 MB).',
+	pt: 'Erro: ficheiro demasiado grande ({size} MB, máximo 25 MB).'
 };
 
 const MSG_COMPARE_DONE: Record<Locale, string> = {
@@ -119,7 +129,9 @@ const MSG_COMPARE_DONE: Record<Locale, string> = {
 	en: 'VLM vs OCR comparison: {agree} field(s) agree, {disagree} diverge. Details are shown in the panel.',
 	es: 'Comparación VLM vs OCR: {agree} campo(s) concordante(s), {disagree} divergente(s). El detalle se muestra en el panel.',
 	zh: 'VLM 与 OCR 对比：{agree} 个字段一致，{disagree} 个存在分歧。详情显示在面板中。',
-	de: 'VLM-vs-OCR-Vergleich: {agree} Feld(er) stimmen überein, {disagree} weichen ab. Details werden im Panel angezeigt.'
+	de: 'VLM-vs-OCR-Vergleich: {agree} Feld(er) stimmen überein, {disagree} weichen ab. Details werden im Panel angezeigt.',
+	it: 'Confronto VLM vs OCR: {agree} campo/i concordante/i, {disagree} divergente/i. Il dettaglio è mostrato nel pannello.',
+	pt: 'Comparação VLM vs OCR: {agree} campo(s) concordante(s), {disagree} divergente(s). O detalhe é apresentado no painel.'
 };
 
 const MSG_COMPARE_UNAVAILABLE: Record<Locale, string> = {
@@ -127,7 +139,9 @@ const MSG_COMPARE_UNAVAILABLE: Record<Locale, string> = {
 	en: 'VLM/OCR comparison unavailable: the OCR connector is not configured (endpoint/apiKey) — vision-only extraction.',
 	es: 'Comparación VLM/OCR no disponible: el conector OCR no está configurado (endpoint/apiKey) — extracción solo por visión.',
 	zh: 'VLM/OCR 对比不可用：OCR 连接器未配置（endpoint/apiKey）— 仅使用视觉提取。',
-	de: 'VLM/OCR-Vergleich nicht verfügbar: Der OCR-Konnektor ist nicht konfiguriert (endpoint/apiKey) — nur Vision-Extraktion.'
+	de: 'VLM/OCR-Vergleich nicht verfügbar: Der OCR-Konnektor ist nicht konfiguriert (endpoint/apiKey) — nur Vision-Extraktion.',
+	it: 'Confronto VLM/OCR non disponibile: il connettore OCR non è configurato (endpoint/apiKey) — solo estrazione visiva.',
+	pt: 'Comparação VLM/OCR indisponível: o conector OCR não está configurado (endpoint/apiKey) — apenas extração por visão.'
 };
 
 const MSG_LLM_ERROR: Record<Locale, string> = {
@@ -135,7 +149,9 @@ const MSG_LLM_ERROR: Record<Locale, string> = {
 	en: 'Extraction LLM connector error: {error}. Check the OCR plugin configuration (llmEndpoint/llmApiKey/llmModel) — for Azure AI Foundry the base URL https://<resource>.services.ai.azure.com is enough (the /anthropic/v1/messages route is added automatically).',
 	es: 'Error del conector LLM de extracción: {error}. Verifica la configuración del plugin OCR (llmEndpoint/llmApiKey/llmModel) — para Azure AI Foundry basta la URL base https://<recurso>.services.ai.azure.com (la ruta /anthropic/v1/messages se añade automáticamente).',
 	zh: '提取 LLM 连接器错误：{error}。请检查 OCR 插件配置（llmEndpoint/llmApiKey/llmModel）— 对于 Azure AI Foundry，基础 URL https://<资源>.services.ai.azure.com 即可（/anthropic/v1/messages 路由会自动添加）。',
-	de: 'Fehler des Extraktions-LLM-Konnektors: {error}. Prüfe die Konfiguration des OCR-Plugins (llmEndpoint/llmApiKey/llmModel) — für Azure AI Foundry genügt die Basis-URL https://<Ressource>.services.ai.azure.com (die Route /anthropic/v1/messages wird automatisch ergänzt).'
+	de: 'Fehler des Extraktions-LLM-Konnektors: {error}. Prüfe die Konfiguration des OCR-Plugins (llmEndpoint/llmApiKey/llmModel) — für Azure AI Foundry genügt die Basis-URL https://<Ressource>.services.ai.azure.com (die Route /anthropic/v1/messages wird automatisch ergänzt).',
+	it: "Errore del connettore LLM di estrazione: {error}. Verifica la configurazione del plugin OCR (llmEndpoint/llmApiKey/llmModel) — per Azure AI Foundry basta l'URL di base https://<risorsa>.services.ai.azure.com (la route /anthropic/v1/messages viene aggiunta automaticamente).",
+	pt: 'Erro do conector LLM de extração: {error}. Verifique a configuração do plugin OCR (llmEndpoint/llmApiKey/llmModel) — para o Azure AI Foundry basta o URL base https://<recurso>.services.ai.azure.com (a rota /anthropic/v1/messages é acrescentada automaticamente).'
 };
 
 const MSG_TOKEN_USAGE: Record<Locale, string> = {
@@ -143,7 +159,9 @@ const MSG_TOKEN_USAGE: Record<Locale, string> = {
 	en: 'Token consumption — vision (VLM): {vlmIn} input / {vlmOut} output · text (OCR): {ocrIn} input / {ocrOut} output.',
 	es: 'Consumo de tokens — visión (VLM): {vlmIn} entrada / {vlmOut} salida · texto (OCR): {ocrIn} entrada / {ocrOut} salida.',
 	zh: 'Token 消耗 — 视觉（VLM）：输入 {vlmIn} / 输出 {vlmOut} · 文本（OCR）：输入 {ocrIn} / 输出 {ocrOut}。',
-	de: 'Token-Verbrauch — Vision (VLM): {vlmIn} Eingabe / {vlmOut} Ausgabe · Text (OCR): {ocrIn} Eingabe / {ocrOut} Ausgabe.'
+	de: 'Token-Verbrauch — Vision (VLM): {vlmIn} Eingabe / {vlmOut} Ausgabe · Text (OCR): {ocrIn} Eingabe / {ocrOut} Ausgabe.',
+	it: 'Consumo di token — visione (VLM): {vlmIn} input / {vlmOut} output · testo (OCR): {ocrIn} input / {ocrOut} output.',
+	pt: 'Consumo de tokens — visão (VLM): {vlmIn} entrada / {vlmOut} saída · texto (OCR): {ocrIn} entrada / {ocrOut} saída.'
 };
 
 const MSG_COST_SUMMARY: Record<Locale, string> = {
@@ -151,7 +169,9 @@ const MSG_COST_SUMMARY: Record<Locale, string> = {
 	en: 'Estimated cost — vision approach (VLM): {vlm} · text approach (Mistral OCR {pages} page(s) + LLM): {ocr} (token prices from openrouter.ai).',
 	es: 'Coste estimado — enfoque visión (VLM): {vlm} · enfoque texto (Mistral OCR {pages} página(s) + LLM): {ocr} (precios de tokens de openrouter.ai).',
 	zh: '估算成本 — 视觉方案（VLM）：{vlm} · 文本方案（Mistral OCR {pages} 页 + LLM）：{ocr}（token 价格来自 openrouter.ai）。',
-	de: 'Geschätzte Kosten — Vision-Ansatz (VLM): {vlm} · Text-Ansatz (Mistral OCR {pages} Seite(n) + LLM): {ocr} (Token-Preise von openrouter.ai).'
+	de: 'Geschätzte Kosten — Vision-Ansatz (VLM): {vlm} · Text-Ansatz (Mistral OCR {pages} Seite(n) + LLM): {ocr} (Token-Preise von openrouter.ai).',
+	it: 'Costo stimato — approccio visivo (VLM): {vlm} · approccio testuale (Mistral OCR {pages} pagina/e + LLM): {ocr} (prezzi dei token di openrouter.ai).',
+	pt: 'Custo estimado — abordagem por visão (VLM): {vlm} · abordagem por texto (Mistral OCR {pages} página(s) + LLM): {ocr} (preços de tokens da openrouter.ai).'
 };
 
 const MSG_COMPARE_FAILED: Record<Locale, string> = {
@@ -159,7 +179,9 @@ const MSG_COMPARE_FAILED: Record<Locale, string> = {
 	en: 'VLM/OCR comparison failed ({error}) — vision-only extraction.',
 	es: 'Comparación VLM/OCR fallida ({error}) — extracción solo por visión.',
 	zh: 'VLM/OCR 对比失败（{error}）— 仅使用视觉提取。',
-	de: 'VLM/OCR-Vergleich fehlgeschlagen ({error}) — nur Vision-Extraktion.'
+	de: 'VLM/OCR-Vergleich fehlgeschlagen ({error}) — nur Vision-Extraktion.',
+	it: 'Confronto VLM/OCR non riuscito ({error}) — solo estrazione visiva.',
+	pt: 'Comparação VLM/OCR falhada ({error}) — apenas extração por visão.'
 };
 
 const MSG_NO_FIELDS: Record<Locale, string> = {
@@ -167,7 +189,9 @@ const MSG_NO_FIELDS: Record<Locale, string> = {
 	en: 'Error: no fields to extract were provided. Fill the fields parameter with at least one field (name + type).',
 	es: 'Error: no se proporcionó ningún campo a extraer. Completa el parámetro fields con al menos un campo (name + type).',
 	zh: '错误：未提供要提取的字段。请在 fields 参数中至少填写一个字段（name + type）。',
-	de: 'Fehler: keine zu extrahierenden Felder angegeben. Fülle den Parameter fields mit mindestens einem Feld (name + type).'
+	de: 'Fehler: keine zu extrahierenden Felder angegeben. Fülle den Parameter fields mit mindestens einem Feld (name + type).',
+	it: 'Errore: nessun campo da estrarre fornito. Compila il parametro fields con almeno un campo (name + type).',
+	pt: 'Erro: não foi indicado nenhum campo a extrair. Preencha o parâmetro fields com pelo menos um campo (name + type).'
 };
 
 function msg(

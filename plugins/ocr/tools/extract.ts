@@ -45,7 +45,9 @@ const MSG_DONE: Record<Locale, string> = {
 	en: 'Text extracted from {fileName} ({pages} page(s), connector: {provider}). The result is shown in the OCR panel.',
 	es: 'Texto extraído de {fileName} ({pages} página(s), conector: {provider}). El resultado se muestra en el panel OCR.',
 	zh: '已从 {fileName} 提取文本（{pages} 页，连接器：{provider}）。结果显示在 OCR 面板中。',
-	de: 'Text aus {fileName} extrahiert ({pages} Seite(n), Konnektor: {provider}). Das Ergebnis wird im OCR-Panel angezeigt.'
+	de: 'Text aus {fileName} extrahiert ({pages} Seite(n), Konnektor: {provider}). Das Ergebnis wird im OCR-Panel angezeigt.',
+	it: 'Testo estratto da {fileName} ({pages} pagina/e, connettore: {provider}). Il risultato è mostrato nel pannello OCR.',
+	pt: 'Texto extraído de {fileName} ({pages} página(s), conector: {provider}). O resultado é apresentado no painel OCR.'
 };
 
 const MSG_STUB_NOTICE: Record<Locale, string> = {
@@ -53,7 +55,9 @@ const MSG_STUB_NOTICE: Record<Locale, string> = {
 	en: 'NOTE: the OCR connector is not configured (missing endpoint/API key) — DEMO result with placeholder text. Configure the OCR plugin in the admin UI to attach a real service.',
 	es: 'NOTA: el conector OCR no está configurado (faltan endpoint/clave API) — resultado de DEMOSTRACIÓN con texto ficticio. Configura el plugin OCR en el admin para conectar un servicio real.',
 	zh: '注意：OCR 连接器未配置（缺少 endpoint/API 密钥）— 这是使用占位文本的演示结果。请在管理界面配置 OCR 插件以接入真实服务。',
-	de: 'HINWEIS: Der OCR-Konnektor ist nicht konfiguriert (Endpoint/API-Schlüssel fehlen) — DEMO-Ergebnis mit Platzhaltertext. Konfiguriere das OCR-Plugin im Admin-Bereich, um einen echten Dienst anzubinden.'
+	de: 'HINWEIS: Der OCR-Konnektor ist nicht konfiguriert (Endpoint/API-Schlüssel fehlen) — DEMO-Ergebnis mit Platzhaltertext. Konfiguriere das OCR-Plugin im Admin-Bereich, um einen echten Dienst anzubinden.',
+	it: "NOTA: il connettore OCR non è configurato (endpoint/chiave API mancanti) — risultato DIMOSTRATIVO con testo fittizio. Configura il plugin OCR nell'admin per collegare un servizio reale.",
+	pt: 'NOTA: o conector OCR não está configurado (endpoint/chave de API em falta) — resultado de DEMONSTRAÇÃO com texto fictício. Configure o plugin OCR na administração para ligar um serviço real.'
 };
 
 const MSG_FILE_NOT_ACCESSIBLE: Record<Locale, string> = {
@@ -61,7 +65,9 @@ const MSG_FILE_NOT_ACCESSIBLE: Record<Locale, string> = {
 	en: 'Error: file not accessible ({source}). Use exactly one of the file URLs listed in the conversation context — only files of the current conversation are readable.',
 	es: 'Error: archivo inaccesible ({source}). Usa exactamente una de las URLs de archivo listadas en el contexto — solo los archivos de la conversación actual son legibles.',
 	zh: '错误：无法访问文件（{source}）。请使用会话上下文中列出的文件 URL——只能读取当前会话的文件。',
-	de: 'Fehler: Datei nicht zugänglich ({source}). Verwende exakt eine der im Konversationskontext gelisteten Datei-URLs — nur Dateien der aktuellen Konversation sind lesbar.'
+	de: 'Fehler: Datei nicht zugänglich ({source}). Verwende exakt eine der im Konversationskontext gelisteten Datei-URLs — nur Dateien der aktuellen Konversation sind lesbar.',
+	it: 'Errore: file non accessibile ({source}). Usa esattamente uno degli URL dei file elencati nel contesto della conversazione — sono leggibili solo i file della conversazione corrente.',
+	pt: 'Erro: ficheiro inacessível ({source}). Utilize exatamente um dos URLs de ficheiros listados no contexto da conversa — só são legíveis os ficheiros da conversa atual.'
 };
 
 const MSG_OCR_ERROR: Record<Locale, string> = {
@@ -69,7 +75,9 @@ const MSG_OCR_ERROR: Record<Locale, string> = {
 	en: 'OCR service error: {error}',
 	es: 'Error del servicio OCR: {error}',
 	zh: 'OCR 服务错误：{error}',
-	de: 'Fehler des OCR-Dienstes: {error}'
+	de: 'Fehler des OCR-Dienstes: {error}',
+	it: 'Errore del servizio OCR: {error}',
+	pt: 'Erro do serviço OCR: {error}'
 };
 
 /** Short user-facing line for the batch confirmation (the model-directed instructions go in `content`). */
@@ -78,7 +86,9 @@ const MSG_CONFIRM_BATCH_USER: Record<Locale, string> = {
 	en: 'Confirmation required: {fileName} has {totalPages} pages (limit: {maxPages} pages per OCR request) — can be processed in {batches} batch(es){cappedNote}.',
 	es: 'Confirmación requerida: {fileName} tiene {totalPages} páginas (límite: {maxPages} páginas por petición OCR) — puede procesarse en {batches} lote(s){cappedNote}.',
 	zh: '需要确认：{fileName} 共 {totalPages} 页（OCR 每次请求上限 {maxPages} 页）— 可分 {batches} 批处理{cappedNote}。',
-	de: 'Bestätigung erforderlich: {fileName} hat {totalPages} Seiten (Limit: {maxPages} Seiten pro OCR-Anfrage) — Verarbeitung in {batches} Los(en) möglich{cappedNote}.'
+	de: 'Bestätigung erforderlich: {fileName} hat {totalPages} Seiten (Limit: {maxPages} Seiten pro OCR-Anfrage) — Verarbeitung in {batches} Los(en) möglich{cappedNote}.',
+	it: 'Conferma richiesta: {fileName} ha {totalPages} pagine (limite: {maxPages} pagine per richiesta OCR) — elaborabile in {batches} lotto/i{cappedNote}.',
+	pt: 'Confirmação necessária: {fileName} tem {totalPages} páginas (limite: {maxPages} páginas por pedido OCR) — pode ser processado em {batches} lote(s){cappedNote}.'
 };
 
 const MSG_CONFIRM_BATCH: Record<Locale, string> = {
@@ -86,7 +96,9 @@ const MSG_CONFIRM_BATCH: Record<Locale, string> = {
 	en: 'CONFIRMATION REQUIRED — document {fileName} has {totalPages} pages, above the OCR service limit of {maxPages} pages per request. It can be processed in batches ({batches} call(s) of at most {maxPages} pages, global cap of 500 pages{cappedNote}). EXPLICITLY ask the user whether to continue. If they confirm, call ocr_extract again with the same parameters plus confirm_batch=true. Do NOT start batch processing without their approval.',
 	es: 'CONFIRMACIÓN REQUERIDA — el documento {fileName} tiene {totalPages} páginas, por encima del límite de {maxPages} páginas por petición del servicio OCR. Puede procesarse por lotes ({batches} llamada(s) de máximo {maxPages} páginas, tope global de 500 páginas{cappedNote}). Pregunta EXPLÍCITAMENTE al usuario si desea continuar. Si confirma, vuelve a llamar a ocr_extract con los mismos parámetros añadiendo confirm_batch=true. NO inicies el procesamiento por lotes sin su acuerdo.',
 	zh: '需要确认 — 文档 {fileName} 共 {totalPages} 页，超过 OCR 服务每次请求 {maxPages} 页的限制。可以分批处理（{batches} 次调用，每次最多 {maxPages} 页，总上限 500 页{cappedNote}）。请明确询问用户是否继续。如果用户确认，请使用相同参数并加上 confirm_batch=true 再次调用 ocr_extract。未经用户同意不要开始分批处理。',
-	de: 'BESTÄTIGUNG ERFORDERLICH — das Dokument {fileName} hat {totalPages} Seiten und überschreitet das Limit von {maxPages} Seiten pro Anfrage des OCR-Dienstes. Es kann in Losen verarbeitet werden ({batches} Aufruf(e) mit höchstens {maxPages} Seiten, globale Obergrenze 500 Seiten{cappedNote}). Frage den Nutzer AUSDRÜCKLICH, ob fortgefahren werden soll. Bei Bestätigung rufe ocr_extract mit denselben Parametern plus confirm_batch=true erneut auf. Starte die Losverarbeitung NICHT ohne Zustimmung.'
+	de: 'BESTÄTIGUNG ERFORDERLICH — das Dokument {fileName} hat {totalPages} Seiten und überschreitet das Limit von {maxPages} Seiten pro Anfrage des OCR-Dienstes. Es kann in Losen verarbeitet werden ({batches} Aufruf(e) mit höchstens {maxPages} Seiten, globale Obergrenze 500 Seiten{cappedNote}). Frage den Nutzer AUSDRÜCKLICH, ob fortgefahren werden soll. Bei Bestätigung rufe ocr_extract mit denselben Parametern plus confirm_batch=true erneut auf. Starte die Losverarbeitung NICHT ohne Zustimmung.',
+	it: "CONFERMA RICHIESTA — il documento {fileName} ha {totalPages} pagine, oltre il limite di {maxPages} pagine per richiesta del servizio OCR. L'OCR può essere eseguito a lotti ({batches} chiamata/e di massimo {maxPages} pagine, tetto globale di 500 pagine{cappedNote}). Chiedi ESPLICITAMENTE all'utente se vuole continuare. Se conferma, richiama ocr_extract con gli stessi parametri aggiungendo confirm_batch=true. NON avviare l'elaborazione a lotti senza il suo consenso.",
+	pt: 'CONFIRMAÇÃO NECESSÁRIA — o documento {fileName} tem {totalPages} páginas, acima do limite de {maxPages} páginas por pedido do serviço OCR. O OCR pode ser feito por lotes ({batches} chamada(s) de no máximo {maxPages} páginas, limite global de 500 páginas{cappedNote}). Pergunte EXPLICITAMENTE ao utilizador se pretende continuar. Se confirmar, chame novamente ocr_extract com os mesmos parâmetros, acrescentando confirm_batch=true. NÃO inicie o processamento por lotes sem o seu acordo.'
 };
 
 const MSG_CAPPED_NOTE: Record<Locale, string> = {
@@ -94,7 +106,9 @@ const MSG_CAPPED_NOTE: Record<Locale, string> = {
 	en: '; only the first 500 pages will be processed',
 	es: '; solo se procesarán las primeras 500 páginas',
 	zh: '；只会处理前 500 页',
-	de: '; nur die ersten 500 Seiten werden verarbeitet'
+	de: '; nur die ersten 500 Seiten werden verarbeitet',
+	it: '; verranno elaborate solo le prime 500 pagine',
+	pt: '; só serão processadas as primeiras 500 páginas'
 };
 
 const MSG_BATCH_DONE: Record<Locale, string> = {
@@ -102,7 +116,9 @@ const MSG_BATCH_DONE: Record<Locale, string> = {
 	en: 'Batched OCR: {processed} page(s) processed in {batches} batch(es) (document of {totalPages} pages{cappedNote}).',
 	es: 'OCR por lotes: {processed} página(s) procesada(s) en {batches} lote(s) (documento de {totalPages} páginas{cappedNote}).',
 	zh: '分批 OCR：{processed} 页已处理，共 {batches} 批（文档共 {totalPages} 页{cappedNote}）。',
-	de: 'OCR in Losen: {processed} Seite(n) in {batches} Los(en) verarbeitet (Dokument mit {totalPages} Seiten{cappedNote}).'
+	de: 'OCR in Losen: {processed} Seite(n) in {batches} Los(en) verarbeitet (Dokument mit {totalPages} Seiten{cappedNote}).',
+	it: 'OCR a lotti: {processed} pagina/e elaborata/e in {batches} lotto/i (documento di {totalPages} pagine{cappedNote}).',
+	pt: 'OCR por lotes: {processed} página(s) processada(s) em {batches} lote(s) (documento de {totalPages} páginas{cappedNote}).'
 };
 
 const MSG_CAPPED_DONE: Record<Locale, string> = {
@@ -110,7 +126,9 @@ const MSG_CAPPED_DONE: Record<Locale, string> = {
 	en: ' — truncated to the first 500 pages',
 	es: ' — truncado a las primeras 500 páginas',
 	zh: ' — 已截断为前 500 页',
-	de: ' — auf die ersten 500 Seiten gekürzt'
+	de: ' — auf die ersten 500 Seiten gekürzt',
+	it: ' — troncato alle prime 500 pagine',
+	pt: ' — truncado às primeiras 500 páginas'
 };
 
 const MSG_LONG_DOC: Record<Locale, string> = {
@@ -118,7 +136,9 @@ const MSG_LONG_DOC: Record<Locale, string> = {
 	en: 'LONG DOCUMENT ({totalChars} characters, {pages} page(s)) — only a preview is included above and it is NOT sufficient to answer: it only identifies the document. Any answer, summary or claim about the content must rely on ocr_search_text (keyword search) and ocr_read_text (paginated reading by offset) calls with doc="{docId}", made BEFORE answering — quote the passages actually read. The full text is stored at {markdownUrl}. Do not try to reproduce the whole document at once.',
 	es: 'DOCUMENTO LARGO ({totalChars} caracteres, {pages} página(s)) — arriba solo se incluye una vista previa y NO ES SUFICIENTE para responder: solo sirve para identificar el documento. Cualquier respuesta, síntesis o afirmación sobre el contenido debe apoyarse en llamadas a ocr_search_text (búsqueda por palabras clave) y ocr_read_text (lectura paginada por offset) con doc="{docId}", realizadas ANTES de responder — cita los pasajes realmente leídos. El texto completo está guardado en {markdownUrl}. No intentes reproducir todo el documento de una vez.',
 	zh: '长文档（{totalChars} 个字符，{pages} 页）— 上面只包含预览，仅用于识别文档，不足以作为回答依据。对内容的任何回答、总结或论断都必须基于在回答之前调用 ocr_search_text（关键词搜索）和 ocr_read_text（按 offset 分页读取，参数 doc="{docId}"）的结果——请引用实际读取的段落。完整文本已保存到 {markdownUrl}。不要试图一次性输出整个文档。',
-	de: 'LANGES DOKUMENT ({totalChars} Zeichen, {pages} Seite(n)) — oben ist nur eine Vorschau enthalten, und sie REICHT NICHT als Antwortgrundlage: sie dient nur der Identifikation des Dokuments. Jede Antwort, Zusammenfassung oder Aussage über den Inhalt muss sich auf ocr_search_text- (Stichwortsuche) und ocr_read_text-Aufrufe (seitenweises Lesen per Offset) mit doc="{docId}" stützen, die VOR der Antwort erfolgen — zitiere die tatsächlich gelesenen Passagen. Der vollständige Text ist unter {markdownUrl} gespeichert. Versuche nicht, das ganze Dokument auf einmal wiederzugeben.'
+	de: 'LANGES DOKUMENT ({totalChars} Zeichen, {pages} Seite(n)) — oben ist nur eine Vorschau enthalten, und sie REICHT NICHT als Antwortgrundlage: sie dient nur der Identifikation des Dokuments. Jede Antwort, Zusammenfassung oder Aussage über den Inhalt muss sich auf ocr_search_text- (Stichwortsuche) und ocr_read_text-Aufrufe (seitenweises Lesen per Offset) mit doc="{docId}" stützen, die VOR der Antwort erfolgen — zitiere die tatsächlich gelesenen Passagen. Der vollständige Text ist unter {markdownUrl} gespeichert. Versuche nicht, das ganze Dokument auf einmal wiederzugeben.',
+	it: 'DOCUMENTO LUNGO ({totalChars} caratteri, {pages} pagina/e) — sopra è inclusa solo un\'anteprima e NON BASTA per rispondere: serve solo a identificare il documento. Ogni risposta, sintesi o affermazione sul contenuto deve basarsi su chiamate a ocr_search_text (ricerca per parole chiave) e ocr_read_text (lettura paginata per offset) con doc="{docId}", eseguite PRIMA di rispondere — cita i passaggi effettivamente letti. Il testo completo è salvato in {markdownUrl}. Non tentare di riprodurre l\'intero documento in una volta.',
+	pt: 'DOCUMENTO LONGO ({totalChars} caracteres, {pages} página(s)) — acima só está incluída uma pré-visualização e NÃO BASTA para responder: serve apenas para identificar o documento. Qualquer resposta, síntese ou afirmação sobre o conteúdo deve basear-se em chamadas a ocr_search_text (pesquisa por palavras-chave) e ocr_read_text (leitura paginada por offset) com doc="{docId}", feitas ANTES de responder — cite as passagens efetivamente lidas. O texto completo está guardado em {markdownUrl}. Não tente reproduzir o documento inteiro de uma só vez.'
 };
 
 function msg(

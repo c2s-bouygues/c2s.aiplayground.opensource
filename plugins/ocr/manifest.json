@@ -136,7 +136,7 @@
 		}
 	],
 	"i18n": {
-		"supportedLocales": ["fr", "en", "es", "zh", "de"],
+		"supportedLocales": ["fr", "en", "es", "zh", "de", "it", "pt"],
 		"defaultLocale": "fr"
 	}
 }

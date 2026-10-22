@@ -20,7 +20,9 @@ const MSG_CHUNK: Record<Locale, string> = {
 	en: 'Excerpt of document {docId} — characters {start} to {end} of {total}.',
 	es: 'Extracto del documento {docId} — caracteres {start} a {end} de {total}.',
 	zh: '文档 {docId} 的摘录 — 第 {start} 至 {end} 个字符（共 {total} 个）。',
-	de: 'Auszug aus Dokument {docId} — Zeichen {start} bis {end} von {total}.'
+	de: 'Auszug aus Dokument {docId} — Zeichen {start} bis {end} von {total}.',
+	it: 'Estratto del documento {docId} — caratteri da {start} a {end} su {total}.',
+	pt: 'Excerto do documento {docId} — caracteres {start} a {end} de {total}.'
 };
 
 const MSG_NEXT: Record<Locale, string> = {
@@ -28,7 +30,9 @@ const MSG_NEXT: Record<Locale, string> = {
 	en: 'More available: call ocr_read_text again with offset={next}.',
 	es: 'Hay más: vuelve a llamar a ocr_read_text con offset={next}.',
 	zh: '还有后续内容：请以 offset={next} 再次调用 ocr_read_text。',
-	de: 'Weiterer Inhalt verfügbar: rufe ocr_read_text erneut mit offset={next} auf.'
+	de: 'Weiterer Inhalt verfügbar: rufe ocr_read_text erneut mit offset={next} auf.',
+	it: 'Altro contenuto disponibile: richiama ocr_read_text con offset={next}.',
+	pt: 'Há mais conteúdo: chame novamente ocr_read_text com offset={next}.'
 };
 
 const MSG_END: Record<Locale, string> = {
@@ -36,7 +40,9 @@ const MSG_END: Record<Locale, string> = {
 	en: 'End of document.',
 	es: 'Fin del documento.',
 	zh: '文档结束。',
-	de: 'Ende des Dokuments.'
+	de: 'Ende des Dokuments.',
+	it: 'Fine del documento.',
+	pt: 'Fim do documento.'
 };
 
 const MSG_NOT_FOUND: Record<Locale, string> = {
@@ -44,7 +50,9 @@ const MSG_NOT_FOUND: Record<Locale, string> = {
 	en: 'Error: OCR document not found ({doc}). Use the docId (or the .md file URL) returned by an ocr_extract call of THIS conversation; re-run ocr_extract if needed.',
 	es: 'Error: documento OCR no encontrado ({doc}). Usa el docId (o la URL del archivo .md) devuelto por una llamada ocr_extract de ESTA conversación; vuelve a ejecutar ocr_extract si es necesario.',
 	zh: '错误：找不到 OCR 文档（{doc}）。请使用本会话中 ocr_extract 调用返回的 docId（或 .md 文件 URL）；如有需要请重新运行 ocr_extract。',
-	de: 'Fehler: OCR-Dokument nicht gefunden ({doc}). Verwende die docId (oder die .md-Datei-URL) aus einem ocr_extract-Aufruf DIESER Konversation; führe ocr_extract bei Bedarf erneut aus.'
+	de: 'Fehler: OCR-Dokument nicht gefunden ({doc}). Verwende die docId (oder die .md-Datei-URL) aus einem ocr_extract-Aufruf DIESER Konversation; führe ocr_extract bei Bedarf erneut aus.',
+	it: "Errore: documento OCR non trovato ({doc}). Usa il docId (o l'URL del file .md) restituito da una chiamata ocr_extract di QUESTA conversazione; se necessario, riesegui ocr_extract.",
+	pt: 'Erro: documento OCR não encontrado ({doc}). Utilize o docId (ou o URL do ficheiro .md) devolvido por uma chamada ocr_extract DESTA conversa; volte a executar ocr_extract se necessário.'
 };
 
 function msg(

@@ -23,7 +23,9 @@ const MSG_RESULTS: Record<Locale, string> = {
 	en: '{shown} occurrence(s) of "{query}" shown out of {total} in document {docId} ({totalChars} characters). Use ocr_read_text with offset=<char_offset> to read around an occurrence.',
 	es: '{shown} aparición(es) de «{query}» mostrada(s) de {total} en el documento {docId} ({totalChars} caracteres). Usa ocr_read_text con offset=<char_offset> para leer alrededor de una aparición.',
 	zh: '在文档 {docId}（{totalChars} 个字符）中共找到 {total} 处“{query}”，显示 {shown} 处。使用 ocr_read_text 并设置 offset=<char_offset> 可阅读某处上下文。',
-	de: '{shown} Vorkommen von „{query}“ angezeigt von {total} im Dokument {docId} ({totalChars} Zeichen). Nutze ocr_read_text mit offset=<char_offset>, um den Kontext eines Vorkommens zu lesen.'
+	de: '{shown} Vorkommen von „{query}“ angezeigt von {total} im Dokument {docId} ({totalChars} Zeichen). Nutze ocr_read_text mit offset=<char_offset>, um den Kontext eines Vorkommens zu lesen.',
+	it: "{shown} occorrenza/e di «{query}» mostrata/e su {total} nel documento {docId} ({totalChars} caratteri). Usa ocr_read_text con offset=<char_offset> per leggere il contesto di un'occorrenza.",
+	pt: '{shown} ocorrência(s) de «{query}» apresentada(s) de {total} no documento {docId} ({totalChars} caracteres). Utilize ocr_read_text com offset=<char_offset> para ler à volta de uma ocorrência.'
 };
 
 const MSG_NO_MATCH: Record<Locale, string> = {
@@ -31,7 +33,9 @@ const MSG_NO_MATCH: Record<Locale, string> = {
 	en: 'No occurrence of "{query}" in document {docId} (case- and accent-insensitive search). Try a shorter term or a variant.',
 	es: 'Ninguna aparición de «{query}» en el documento {docId} (búsqueda insensible a mayúsculas y acentos). Prueba un término más corto o una variante.',
 	zh: '文档 {docId} 中未找到“{query}”（搜索不区分大小写和重音）。请尝试更短的词或其变体。',
-	de: 'Kein Vorkommen von „{query}“ im Dokument {docId} (Groß-/Kleinschreibung und Akzente werden ignoriert). Versuche einen kürzeren Begriff oder eine Variante.'
+	de: 'Kein Vorkommen von „{query}“ im Dokument {docId} (Groß-/Kleinschreibung und Akzente werden ignoriert). Versuche einen kürzeren Begriff oder eine Variante.',
+	it: 'Nessuna occorrenza di «{query}» nel documento {docId} (ricerca che ignora maiuscole e accenti). Prova un termine più breve o una variante.',
+	pt: 'Nenhuma ocorrência de «{query}» no documento {docId} (pesquisa sem distinção de maiúsculas e acentos). Experimente um termo mais curto ou uma variante.'
 };
 
 const MSG_NOT_FOUND: Record<Locale, string> = {
@@ -39,7 +43,9 @@ const MSG_NOT_FOUND: Record<Locale, string> = {
 	en: 'Error: OCR document not found ({doc}). Use the docId returned by an ocr_extract call of THIS conversation; re-run ocr_extract if needed.',
 	es: 'Error: documento OCR no encontrado ({doc}). Usa el docId devuelto por una llamada ocr_extract de ESTA conversación; vuelve a ejecutar ocr_extract si es necesario.',
 	zh: '错误：找不到 OCR 文档（{doc}）。请使用本会话中 ocr_extract 调用返回的 docId；如有需要请重新运行 ocr_extract。',
-	de: 'Fehler: OCR-Dokument nicht gefunden ({doc}). Verwende die docId aus einem ocr_extract-Aufruf DIESER Konversation; führe ocr_extract bei Bedarf erneut aus.'
+	de: 'Fehler: OCR-Dokument nicht gefunden ({doc}). Verwende die docId aus einem ocr_extract-Aufruf DIESER Konversation; führe ocr_extract bei Bedarf erneut aus.',
+	it: 'Errore: documento OCR non trovato ({doc}). Usa il docId restituito da una chiamata ocr_extract di QUESTA conversazione; se necessario, riesegui ocr_extract.',
+	pt: 'Erro: documento OCR não encontrado ({doc}). Utilize o docId devolvido por uma chamada ocr_extract DESTA conversa; volte a executar ocr_extract se necessário.'
 };
 
 const MSG_EMPTY_QUERY: Record<Locale, string> = {
@@ -47,7 +53,9 @@ const MSG_EMPTY_QUERY: Record<Locale, string> = {
 	en: 'Error: the query parameter is empty.',
 	es: 'Error: el parámetro query está vacío.',
 	zh: '错误：query 参数为空。',
-	de: 'Fehler: Der Parameter query ist leer.'
+	de: 'Fehler: Der Parameter query ist leer.',
+	it: 'Errore: il parametro query è vuoto.',
+	pt: 'Erro: o parâmetro query está vazio.'
 };
 
 function msg(

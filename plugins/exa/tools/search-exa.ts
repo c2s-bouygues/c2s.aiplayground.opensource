@@ -82,7 +82,9 @@ const SEARCH_RESULTS_FOUND: Record<Locale, string> = {
 	en: '{count} results found via Exa.',
 	es: '{count} resultados encontrados en Exa.',
 	zh: '通过 Exa 找到 {count} 个结果。',
-	de: '{count} Ergebnisse über Exa gefunden.'
+	de: '{count} Ergebnisse über Exa gefunden.',
+	it: '{count} risultati trovati tramite Exa.',
+	pt: '{count} resultados encontrados através do Exa.'
 };
 
 function searchResultsFoundMsg(locale: Locale | undefined, count: number): string {
