@@ -4,6 +4,8 @@ import type { AnyTool, PluginContext } from '../../../src/types';
 const API_BASE_URL = 'https://api.eu.volubile.ai';
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_KPI_PAGES = 10;
+// Duree maximale de lecture des pages pour un calcul KPI; au-dela, on renvoie des resultats partiels.
+const KPI_MAX_DURATION_MS = 60_000;
 const KPI_PAGE_SIZE = 500;
 const SEARCH_DEFAULT_SIZE = 20;
 
@@ -181,15 +183,19 @@ function forgetToken(token: string): void {
 }
 
 /** Lit une route Volubile avec le jeton en cache; si Volubile le refuse (401), en cree un nouveau une seule fois. */
-async function readJson<T>(context: PluginContext, path: string): Promise<T> {
+async function readJson<T>(
+	context: PluginContext,
+	path: string,
+	timeoutMs = REQUEST_TIMEOUT_MS
+): Promise<T> {
 	const apiKey = getApiKey(context);
 	const token = await getReadOnlyToken(apiKey);
 	try {
-		return await getJson<T>(token, path);
+		return await getJson<T>(token, path, timeoutMs);
 	} catch (error) {
 		if (!(error instanceof VolubileApiError) || error.status !== 401) throw error;
 		forgetToken(token);
-		return getJson<T>(await getReadOnlyToken(apiKey), path);
+		return getJson<T>(await getReadOnlyToken(apiKey), path, timeoutMs);
 	}
 }
 
@@ -212,14 +218,14 @@ async function issueReadOnlyToken(apiKey: string): Promise<{ token: string; expi
 	return { token: payload.token, expiresIn: payload.expiresIn };
 }
 
-async function getJson<T>(accessToken: string, path: string): Promise<T> {
+async function getJson<T>(accessToken: string, path: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
 	const response = await fetch(`${API_BASE_URL}${path}`, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',
 			Authorization: `Bearer ${accessToken}`
 		},
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+		signal: AbortSignal.timeout(timeoutMs)
 	});
 
 	if (!response.ok) throw await apiError(response);
@@ -686,6 +692,7 @@ export function createGetCallKpisTool(context: PluginContext): AnyTool {
 				if (params.agentId) search.set('agentId', requireUuid(params.agentId));
 				if (params.campaignName) search.set('campaignName', params.campaignName);
 
+				const deadline = Date.now() + KPI_MAX_DURATION_MS;
 				const firstPage = parseAnalysisPage(
 					await readJson<unknown>(context, `/v1/calls?${search.toString()}`)
 				);
@@ -694,12 +701,30 @@ export function createGetCallKpisTool(context: PluginContext): AnyTool {
 				const calls = firstPage.content.slice(0, maximumCalls);
 				let overflow = firstPage.content.length > maximumCalls;
 				let pagesRead = 1;
+				let stoppedByTimeLimit = false;
 
 				for (let pageNumber = 2; pageNumber <= pagesToRead && calls.length < maximumCalls; pageNumber += 1) {
+					// Temps restant avant la limite globale; chaque page attend au plus ce temps-la.
+					const timeLeft = deadline - Date.now();
+					if (timeLeft < 1000) {
+						stoppedByTimeLimit = true;
+						break;
+					}
 					search.set('page', String(pageNumber));
-					const page = parseAnalysisPage(
-						await readJson<unknown>(context, `/v1/calls?${search.toString()}`)
-					);
+					let rawPage: unknown;
+					try {
+						rawPage = await readJson<unknown>(
+							context,
+							`/v1/calls?${search.toString()}`,
+							Math.min(REQUEST_TIMEOUT_MS, timeLeft)
+						);
+					} catch (error) {
+						// Page trop lente: on garde les pages deja lues au lieu de tout perdre.
+						if (!(error instanceof Error) || error.name !== 'TimeoutError') throw error;
+						stoppedByTimeLimit = true;
+						break;
+					}
+					const page = parseAnalysisPage(rawPage);
 					if (page.totalElements !== firstPage.totalElements || page.totalPages !== firstPage.totalPages) {
 						throw new Error('Les donnees ont change pendant la pagination. Relancer sur une periode stable.');
 					}
@@ -738,7 +763,11 @@ export function createGetCallKpisTool(context: PluginContext): AnyTool {
 				}));
 				const truncated = overflow || firstPage.totalPages > pagesRead || calls.length < firstPage.totalElements;
 				const warnings: string[] = [];
-				if (truncated) warnings.push('Resultats partiels: ne pas extrapoler a toute la periode. Reduire la periode.');
+				if (stoppedByTimeLimit) {
+					warnings.push(`Lecture trop longue, arretee avant la fin (limite ${KPI_MAX_DURATION_MS / 1000} s ou page trop lente; ${pagesRead} pages lues sur ${firstPage.totalPages}): resultats partiels, ne pas extrapoler. Reduire la periode ou filtrer par agent ou campagne.`);
+				} else if (truncated) {
+					warnings.push('Resultats partiels: ne pas extrapoler a toute la periode. Reduire la periode.');
+				}
 				if (categoryCoverage.some((category) => category.callsMissingCategory > 0)) warnings.push('Certaines categories sont absentes: voir categoryCoverage et la politique du denominateur.');
 				if (!selected.length) warnings.push('Aucun appel ne correspond aux filtres parmi les appels recuperes. Verifier les noms exacts des categories et labels.');
 				return {
@@ -754,6 +783,7 @@ export function createGetCallKpisTool(context: PluginContext): AnyTool {
 					pagesRead,
 					maximumCalls,
 					truncated,
+					stoppedByTimeLimit,
 					warnings,
 					categoryCoverage,
 					unit: params.metric === 'rate' ? 'percent' : params.metric === 'count' ? 'calls' : 'seconds',
