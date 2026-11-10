@@ -5,6 +5,7 @@ const API_BASE_URL = 'https://api.eu.volubile.ai';
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_KPI_PAGES = 10;
 const KPI_PAGE_SIZE = 500;
+const SEARCH_DEFAULT_SIZE = 20;
 
 const READ_SCOPES = ['agents:read', 'calls:read', 'campaigns:read'];
 
@@ -551,7 +552,7 @@ export function createListAgentsTool(context: PluginContext): AnyTool {
 
 export function createSearchCallsTool(context: PluginContext): AnyTool {
 	return tool({
-		description: 'Recherche les appels Volubile entre deux dates. Les numeros et variables de contexte ne sont pas renvoyes.',
+		description: 'Recherche des exemples d appels Volubile entre deux dates. Les numeros et variables de contexte ne sont pas renvoyes. Pour compter, totaliser des durees ou calculer un taux, utiliser get_call_kpis.',
 		inputSchema: jsonSchema<SearchCallsParams>({
 			type: 'object',
 			properties: {
@@ -561,7 +562,7 @@ export function createSearchCallsTool(context: PluginContext): AnyTool {
 				phone: { type: 'string', description: 'Filtre par numero E.164. Le numero ne sera pas renvoye dans les resultats.' },
 				campaignName: { type: 'string', description: 'Filtre par nom de campagne.' },
 				page: { type: 'integer', minimum: 1, description: 'Page a lire, a partir de 1.' },
-				size: { type: 'integer', minimum: 1, maximum: 100, description: 'Nombre d appels, maximum 100.' }
+				size: { type: 'integer', minimum: 1, maximum: 100, description: 'Nombre d appels, par defaut 20, maximum 100.' }
 			},
 			required: ['from', 'to']
 		}),
@@ -572,7 +573,7 @@ export function createSearchCallsTool(context: PluginContext): AnyTool {
 					from: params.from,
 					to: params.to,
 					page: String(params.page || 1),
-					size: String(params.size || 50)
+					size: String(params.size || SEARCH_DEFAULT_SIZE)
 				});
 				if (params.agentId) search.set('agentId', requireUuid(params.agentId));
 				if (params.phone) search.set('phone', params.phone);

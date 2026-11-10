@@ -24,8 +24,8 @@
       "name": "Rechercher des appels Volubile",
       "description": "Recherche des appels sur une periode et renvoie leurs informations utiles",
       "systemPromptInstructions": {
-        "fr": "- volubile_search_calls: Recherche les appels entre deux dates\n  - Demande une periode precise si elle n'est pas indiquee\n  - Peut filtrer par agent, numero ou campagne; utilise les categories et statuts pour analyser les resultats\n  - Les numeros de telephone et variables de contexte ne sont pas renvoyes",
-        "en": "- volubile_search_calls: Search calls between two dates\n  - Ask for a date range if one was not specified\n  - Can filter by agent, phone or campaign; use categories and statuses to analyze results\n  - Phone numbers and context variables are not returned"
+        "fr": "- volubile_search_calls: Recherche les appels entre deux dates\n  - Demande une periode precise si elle n'est pas indiquee\n  - Peut filtrer par agent, numero ou campagne. Renvoie 20 appels par defaut: sert a voir des exemples, pas a compter\n  - Le nombre total d'appels est dans totalElements. Pour compter, totaliser des durees ou calculer un taux, utilise volubile_get_call_kpis; ne compte jamais toi-meme les appels d'une page\n  - Les numeros de telephone et variables de contexte ne sont pas renvoyes",
+        "en": "- volubile_search_calls: Search calls between two dates\n  - Ask for a date range if one was not specified\n  - Can filter by agent, phone or campaign. Returns 20 calls by default: use it to see examples, not to count\n  - The total number of calls is in totalElements. To count, sum durations or compute rates, use volubile_get_call_kpis; never count the calls of a page yourself\n  - Phone numbers and context variables are not returned"
       }
     },
     {
