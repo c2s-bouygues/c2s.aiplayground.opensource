@@ -115,7 +115,16 @@ function messageFor(context: PluginContext, french: string, english: string): st
 	return context.locale === 'en' ? english : french;
 }
 
-async function apiError(response: Response): Promise<Error> {
+class VolubileApiError extends Error {
+	status: number;
+
+	constructor(message: string, status: number) {
+		super(message);
+		this.status = status;
+	}
+}
+
+async function apiError(response: Response): Promise<VolubileApiError> {
 	let detail = '';
 	try {
 		const payload: unknown = await response.json();
@@ -123,12 +132,67 @@ async function apiError(response: Response): Promise<Error> {
 			detail = `: ${payload.message}`;
 		}
 	} catch {
-		return new Error(`Volubile a repondu HTTP ${response.status}${detail}`);
+		// Corps de reponse absent ou non JSON: on garde seulement le code HTTP.
 	}
-	return new Error(`Volubile a repondu HTTP ${response.status}${detail}`);
+	return new VolubileApiError(`Volubile a repondu HTTP ${response.status}${detail}`, response.status);
 }
 
-async function issueReadOnlyToken(apiKey: string): Promise<string> {
+// Volubile limite la creation de jetons a 10 par minute et par cle API, et recommande
+// de reutiliser un jeton jusqu'a son expiration. Le jeton reste en memoire serveur:
+// il n'est jamais renvoye a l'IA, et il est limite a la lecture.
+const DEFAULT_TOKEN_LIFETIME_SECONDS = 300;
+const TOKEN_RENEWAL_MARGIN_MS = 60_000;
+
+interface CachedToken {
+	apiKey: string;
+	token: string;
+	expiresAt: number;
+}
+
+let cachedToken: CachedToken | null = null;
+let pendingToken: { apiKey: string; promise: Promise<CachedToken> } | null = null;
+
+async function getReadOnlyToken(apiKey: string): Promise<string> {
+	if (cachedToken && cachedToken.apiKey === apiKey && Date.now() < cachedToken.expiresAt - TOKEN_RENEWAL_MARGIN_MS) {
+		return cachedToken.token;
+	}
+	// Si plusieurs outils demandent un jeton en meme temps, un seul est cree.
+	if (!pendingToken || pendingToken.apiKey !== apiKey) {
+		const promise = issueReadOnlyToken(apiKey)
+			.then(({ token, expiresIn }) => {
+				const lifetimeSeconds =
+					typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0
+						? expiresIn
+						: DEFAULT_TOKEN_LIFETIME_SECONDS;
+				cachedToken = { apiKey, token, expiresAt: Date.now() + lifetimeSeconds * 1000 };
+				return cachedToken;
+			})
+			.finally(() => {
+				if (pendingToken?.promise === promise) pendingToken = null;
+			});
+		pendingToken = { apiKey, promise };
+	}
+	return (await pendingToken.promise).token;
+}
+
+function forgetToken(token: string): void {
+	if (cachedToken?.token === token) cachedToken = null;
+}
+
+/** Lit une route Volubile avec le jeton en cache; si Volubile le refuse (401), en cree un nouveau une seule fois. */
+async function readJson<T>(context: PluginContext, path: string): Promise<T> {
+	const apiKey = getApiKey(context);
+	const token = await getReadOnlyToken(apiKey);
+	try {
+		return await getJson<T>(token, path);
+	} catch (error) {
+		if (!(error instanceof VolubileApiError) || error.status !== 401) throw error;
+		forgetToken(token);
+		return getJson<T>(await getReadOnlyToken(apiKey), path);
+	}
+}
+
+async function issueReadOnlyToken(apiKey: string): Promise<{ token: string; expiresIn?: number }> {
 	const response = await fetch(`${API_BASE_URL}/v1/auth/token`, {
 		method: 'POST',
 		headers: {
@@ -144,7 +208,7 @@ async function issueReadOnlyToken(apiKey: string): Promise<string> {
 
 	const payload = (await response.json()) as ApiTokenResponse;
 	if (!payload.token) throw new Error("Volubile n'a pas renvoye de jeton de lecture.");
-	return payload.token;
+	return { token: payload.token, expiresIn: payload.expiresIn };
 }
 
 async function getJson<T>(accessToken: string, path: string): Promise<T> {
@@ -464,9 +528,8 @@ export function createListAgentsTool(context: PluginContext): AnyTool {
 					size: String(params.size || 50)
 				});
 				if (params.type) search.set('type', params.type);
-				const token = await issueReadOnlyToken(getApiKey(context));
 				const page = parsePage<ApiAgent>(
-					await getJson<unknown>(token, `/v1/agents?${search.toString()}`)
+					await readJson<unknown>(context, `/v1/agents?${search.toString()}`)
 				);
 				return { ...page, content: page.content.map(toSafeAgent) };
 			})
@@ -501,9 +564,8 @@ export function createSearchCallsTool(context: PluginContext): AnyTool {
 				if (params.agentId) search.set('agentId', requireUuid(params.agentId));
 				if (params.phone) search.set('phone', params.phone);
 				if (params.campaignName) search.set('campaignName', params.campaignName);
-				const token = await issueReadOnlyToken(getApiKey(context));
 				const page = parsePage<ApiCall>(
-					await getJson<unknown>(token, `/v1/calls?${search.toString()}`)
+					await readJson<unknown>(context, `/v1/calls?${search.toString()}`)
 				);
 				return { ...page, content: page.content.map(toSafeCall) };
 			})
@@ -520,8 +582,7 @@ export function createGetCallDetailsTool(context: PluginContext): AnyTool {
 		}),
 		execute: async (params) =>
 			runTool(context, 'get_call_details', async () => {
-				const token = await issueReadOnlyToken(getApiKey(context));
-				const call = await getJson<ApiCall>(token, `/v1/calls/${requireUuid(params.id)}`);
+				const call = await readJson<ApiCall>(context, `/v1/calls/${requireUuid(params.id)}`);
 				return toSafeCall(call);
 			})
 	});
@@ -541,9 +602,8 @@ export function createGetCallTranscriptTool(context: PluginContext): AnyTool {
 		execute: async (params) =>
 			runTool(context, 'get_call_transcript', async () => {
 				const maxCharacters = Math.min(Math.max(params.maxCharacters || 8000, 1000), 20000);
-				const token = await issueReadOnlyToken(getApiKey(context));
-				const transcript = await getJson<unknown>(
-					token,
+				const transcript = await readJson<unknown>(
+					context,
 					`/v1/calls/${requireUuid(params.id)}/transcript`
 				);
 				return limitTranscript(normalizeTranscript(transcript), maxCharacters);
@@ -561,9 +621,8 @@ export function createGetCampaignDetailsTool(context: PluginContext): AnyTool {
 		}),
 		execute: async (params) =>
 			runTool(context, 'get_campaign_details', async () => {
-				const token = await issueReadOnlyToken(getApiKey(context));
-				const campaign = await getJson<Record<string, unknown>>(
-					token,
+				const campaign = await readJson<Record<string, unknown>>(
+					context,
 					`/v1/campaigns/${requireUuid(params.id)}`
 				);
 				return {
@@ -613,9 +672,8 @@ export function createGetCallKpisTool(context: PluginContext): AnyTool {
 				if (params.agentId) search.set('agentId', requireUuid(params.agentId));
 				if (params.campaignName) search.set('campaignName', params.campaignName);
 
-				const token = await issueReadOnlyToken(getApiKey(context));
 				const firstPage = parseAnalysisPage(
-					await getJson<unknown>(token, `/v1/calls?${search.toString()}`)
+					await readJson<unknown>(context, `/v1/calls?${search.toString()}`)
 				);
 				const pagesToRead = Math.min(Math.max(firstPage.totalPages, 1), MAX_KPI_PAGES);
 				const maximumCalls = MAX_KPI_PAGES * KPI_PAGE_SIZE;
@@ -626,7 +684,7 @@ export function createGetCallKpisTool(context: PluginContext): AnyTool {
 				for (let pageNumber = 2; pageNumber <= pagesToRead && calls.length < maximumCalls; pageNumber += 1) {
 					search.set('page', String(pageNumber));
 					const page = parseAnalysisPage(
-						await getJson<unknown>(token, `/v1/calls?${search.toString()}`)
+						await readJson<unknown>(context, `/v1/calls?${search.toString()}`)
 					);
 					if (page.totalElements !== firstPage.totalElements || page.totalPages !== firstPage.totalPages) {
 						throw new Error('Les donnees ont change pendant la pagination. Relancer sur une periode stable.');
