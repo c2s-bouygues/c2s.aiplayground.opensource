@@ -1,13 +1,11 @@
 import type { PluginExport, PluginToolDefinition } from '../../src/types';
 import manifest from './manifest.json';
-import {
-	createGetCallDetailsTool,
-	createGetCallKpisTool,
-	createGetCallTranscriptTool,
-	createGetCampaignDetailsTool,
-	createListAgentsTool,
-	createSearchCallsTool
-} from './tools/read';
+import { createGetCallDetailsTool } from './tools/get-call-details';
+import { createGetCallKpisTool } from './tools/get-call-kpis';
+import { createGetCallTranscriptTool } from './tools/get-call-transcript';
+import { createGetCampaignDetailsTool } from './tools/get-campaign-details';
+import { createListAgentsTool } from './tools/list-agents';
+import { createSearchCallsTool } from './tools/search-calls';
 
 const tools: PluginToolDefinition[] = [
 	{
