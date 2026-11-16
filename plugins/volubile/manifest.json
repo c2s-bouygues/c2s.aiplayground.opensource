@@ -7,8 +7,29 @@
   "license": "MIT",
   "icon": "hugeicons:telephone",
   "category": "Volubile",
-  "requiredEnvVars": ["VOLUBILE_API_KEY"],
+  "requiredEnvVars": [],
   "optionalEnvVars": [],
+  "configSchema": {
+    "type": "object",
+    "title": "Volubile Configuration",
+    "required": ["apiKey"],
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "title": "Cle API Volubile",
+        "description": "Cle API creee dans Volubile (Parametres > API). Le plugin n'en tire qu'un jeton en lecture seule.",
+        "x-ui-widget": "textarea",
+        "x-ui-order": 1
+      },
+      "apiBaseUrl": {
+        "type": "string",
+        "title": "URL de l'API Volubile",
+        "description": "Adresse de l'API. Par defaut: https://api.eu.volubile.ai",
+        "default": "https://api.eu.volubile.ai",
+        "x-ui-order": 2
+      }
+    }
+  },
   "tools": [
     {
       "id": "list_agents",

@@ -7,36 +7,32 @@ import { createGetCampaignDetailsTool } from './tools/get-campaign-details';
 import { createListAgentsTool } from './tools/list-agents';
 import { createSearchCallsTool } from './tools/search-calls';
 
+// Pas de isAvailable: il ne voit que les variables d'environnement, pas la configuration admin
+// ou se trouve la cle API. Si elle manque, l'outil le signale a l'appel.
 const tools: PluginToolDefinition[] = [
 	{
 		id: 'list_agents',
-		createTool: (context) => createListAgentsTool(context),
-		isAvailable: (env) => !!env.VOLUBILE_API_KEY?.trim()
+		createTool: (context) => createListAgentsTool(context)
 	},
 	{
 		id: 'search_calls',
-		createTool: (context) => createSearchCallsTool(context),
-		isAvailable: (env) => !!env.VOLUBILE_API_KEY?.trim()
+		createTool: (context) => createSearchCallsTool(context)
 	},
 	{
 		id: 'get_call_details',
-		createTool: (context) => createGetCallDetailsTool(context),
-		isAvailable: (env) => !!env.VOLUBILE_API_KEY?.trim()
+		createTool: (context) => createGetCallDetailsTool(context)
 	},
 	{
 		id: 'get_call_transcript',
-		createTool: (context) => createGetCallTranscriptTool(context),
-		isAvailable: (env) => !!env.VOLUBILE_API_KEY?.trim()
+		createTool: (context) => createGetCallTranscriptTool(context)
 	},
 	{
 		id: 'get_campaign_details',
-		createTool: (context) => createGetCampaignDetailsTool(context),
-		isAvailable: (env) => !!env.VOLUBILE_API_KEY?.trim()
+		createTool: (context) => createGetCampaignDetailsTool(context)
 	},
 	{
 		id: 'get_call_kpis',
-		createTool: (context) => createGetCallKpisTool(context),
-		isAvailable: (env) => !!env.VOLUBILE_API_KEY?.trim()
+		createTool: (context) => createGetCallKpisTool(context)
 	}
 ];
 
@@ -46,6 +42,22 @@ const plugin: PluginExport = {
 
 	async onLoad() {
 		console.log('[volubile] Read-only API plugin loaded');
+	},
+
+	validateConfig(config) {
+		const baseUrl = config?.apiBaseUrl;
+		if (baseUrl !== undefined && baseUrl !== '') {
+			if (typeof baseUrl !== 'string') return "apiBaseUrl doit etre une URL";
+			try {
+				if (new URL(baseUrl).protocol !== 'https:') return "apiBaseUrl doit commencer par https://";
+			} catch {
+				return `apiBaseUrl n'est pas une URL valide: "${baseUrl}"`;
+			}
+		}
+		if (config?.apiKey !== undefined && typeof config.apiKey !== 'string') {
+			return 'apiKey doit etre du texte';
+		}
+		return true;
 	}
 };
 

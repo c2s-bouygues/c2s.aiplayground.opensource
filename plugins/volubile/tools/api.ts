@@ -2,7 +2,7 @@
 import type { PluginContext } from '../../../src/types';
 import { isRecord } from './shared';
 
-const API_BASE_URL = 'https://api.eu.volubile.ai';
+export const DEFAULT_API_BASE_URL = 'https://api.eu.volubile.ai';
 export const REQUEST_TIMEOUT_MS = 20_000;
 
 const READ_SCOPES = ['agents:read', 'calls:read', 'campaigns:read'];
@@ -18,10 +18,26 @@ interface ToolResult<T> {
 	data?: T;
 }
 
-function getApiKey(context: PluginContext): string {
-	const apiKey = context.env.VOLUBILE_API_KEY?.trim();
-	if (!apiKey) throw new Error('VOLUBILE_API_KEY est manquante dans la configuration serveur.');
-	return apiKey;
+interface Connection {
+	apiKey: string;
+	baseUrl: string;
+}
+
+function configString(context: PluginContext, key: string): string | undefined {
+	const value: unknown = context.pluginConfig?.[key];
+	return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+/** Cle API et URL, lues dans la configuration du plugin (admin). */
+function getConnection(context: PluginContext): Connection {
+	const apiKey = configString(context, 'apiKey');
+	if (!apiKey) {
+		throw new Error(
+			"Cle API Volubile manquante: renseigne-la dans la configuration du plugin (admin)."
+		);
+	}
+	const baseUrl = (configString(context, 'apiBaseUrl') ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+	return { apiKey, baseUrl };
 }
 
 function messageFor(context: PluginContext, french: string, english: string): string {
@@ -57,33 +73,35 @@ const DEFAULT_TOKEN_LIFETIME_SECONDS = 300;
 const TOKEN_RENEWAL_MARGIN_MS = 60_000;
 
 interface CachedToken {
-	apiKey: string;
+	key: string;
 	token: string;
 	expiresAt: number;
 }
 
 let cachedToken: CachedToken | null = null;
-let pendingToken: { apiKey: string; promise: Promise<CachedToken> } | null = null;
+let pendingToken: { key: string; promise: Promise<CachedToken> } | null = null;
 
-async function getReadOnlyToken(apiKey: string): Promise<string> {
-	if (cachedToken && cachedToken.apiKey === apiKey && Date.now() < cachedToken.expiresAt - TOKEN_RENEWAL_MARGIN_MS) {
+async function getReadOnlyToken(connection: Connection): Promise<string> {
+	// Le jeton depend de la cle et de l'URL: si l'admin change l'une ou l'autre, on en recree un.
+	const key = `${connection.baseUrl}|${connection.apiKey}`;
+	if (cachedToken && cachedToken.key === key && Date.now() < cachedToken.expiresAt - TOKEN_RENEWAL_MARGIN_MS) {
 		return cachedToken.token;
 	}
 	// Si plusieurs outils demandent un jeton en meme temps, un seul est cree.
-	if (!pendingToken || pendingToken.apiKey !== apiKey) {
-		const promise = issueReadOnlyToken(apiKey)
+	if (!pendingToken || pendingToken.key !== key) {
+		const promise = issueReadOnlyToken(connection)
 			.then(({ token, expiresIn }) => {
 				const lifetimeSeconds =
 					typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0
 						? expiresIn
 						: DEFAULT_TOKEN_LIFETIME_SECONDS;
-				cachedToken = { apiKey, token, expiresAt: Date.now() + lifetimeSeconds * 1000 };
+				cachedToken = { key, token, expiresAt: Date.now() + lifetimeSeconds * 1000 };
 				return cachedToken;
 			})
 			.finally(() => {
 				if (pendingToken?.promise === promise) pendingToken = null;
 			});
-		pendingToken = { apiKey, promise };
+		pendingToken = { key, promise };
 	}
 	return (await pendingToken.promise).token;
 }
@@ -98,19 +116,19 @@ export async function readJson<T>(
 	path: string,
 	timeoutMs = REQUEST_TIMEOUT_MS
 ): Promise<T> {
-	const apiKey = getApiKey(context);
-	const token = await getReadOnlyToken(apiKey);
+	const connection = getConnection(context);
+	const token = await getReadOnlyToken(connection);
 	try {
-		return await getJson<T>(token, path, timeoutMs);
+		return await getJson<T>(connection.baseUrl, token, path, timeoutMs);
 	} catch (error) {
 		if (!(error instanceof VolubileApiError) || error.status !== 401) throw error;
 		forgetToken(token);
-		return getJson<T>(await getReadOnlyToken(apiKey), path, timeoutMs);
+		return getJson<T>(connection.baseUrl, await getReadOnlyToken(connection), path, timeoutMs);
 	}
 }
 
-async function issueReadOnlyToken(apiKey: string): Promise<{ token: string; expiresIn?: number }> {
-	const response = await fetch(`${API_BASE_URL}/v1/auth/token`, {
+async function issueReadOnlyToken({ apiKey, baseUrl }: Connection): Promise<{ token: string; expiresIn?: number }> {
+	const response = await fetch(`${baseUrl}/v1/auth/token`, {
 		method: 'POST',
 		headers: {
 			Accept: 'application/json',
@@ -128,8 +146,13 @@ async function issueReadOnlyToken(apiKey: string): Promise<{ token: string; expi
 	return { token: payload.token, expiresIn: payload.expiresIn };
 }
 
-async function getJson<T>(accessToken: string, path: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
-	const response = await fetch(`${API_BASE_URL}${path}`, {
+async function getJson<T>(
+	baseUrl: string,
+	accessToken: string,
+	path: string,
+	timeoutMs = REQUEST_TIMEOUT_MS
+): Promise<T> {
+	const response = await fetch(`${baseUrl}${path}`, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',
